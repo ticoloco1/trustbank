@@ -1,0 +1,54 @@
+// Prisma schema para trustbank.xyz (Postgres na Vercel)
+// Só é usado quando USE_PRISMA=true ou NEXT_PUBLIC_SITE=trustbank
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PlatformSetting {
+  id                    Int      @id @default(1)
+  platform_name         String?  @map("platform_name")
+  logo_url              String?  @map("logo_url")
+  hero_text             String?  @map("hero_text")
+  grid_columns         Int?     @map("grid_columns")
+  updated_at            DateTime @updatedAt @map("updated_at")
+  @@map("platform_settings")
+}
+
+model Profile {
+  id           String    @id @default(uuid())
+  user_id      String    @unique @map("user_id")
+  display_name String?   @map("display_name")
+  avatar_url   String?   @map("avatar_url")
+  investor_mode String?  @map("investor_mode")
+  created_at   DateTime  @default(now()) @map("created_at")
+  updated_at   DateTime  @updatedAt @map("updated_at")
+  @@map("profiles")
+}
+
+model MiniSite {
+  id              String   @id @default(uuid())
+  user_id         String   @map("user_id")
+  site_name       String?  @map("site_name")
+  slug            String?  @unique
+  bio             String?
+  layout_columns  Int?     @map("layout_columns")
+  theme           String?
+  created_at      DateTime @default(now()) @map("created_at")
+  updated_at      DateTime @updatedAt @map("updated_at")
+  @@map("mini_sites")
+}
+
+// TrustBank: lista de wallets que são admin (governance). Sem Supabase.
+model AdminWalletAddress {
+  id             String   @id @default(uuid())
+  wallet_address String   @unique @map("wallet_address")
+  note           String?
+  created_at     DateTime @default(now()) @map("created_at")
+  @@map("admin_wallet_addresses")
+}
