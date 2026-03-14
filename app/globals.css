@@ -1,0 +1,14 @@
+/* Layout de colunas do mini site (1, 2 ou 3) */
+.minisite-layout-1 { display: block; }
+.minisite-layout-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; align-items: start; }
+.minisite-layout-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; align-items: start; }
+.minisite-layout-2 > *,
+.minisite-layout-3 > * { min-width: 0; }
+@media (max-width: 768px) {
+  .minisite-layout-2, .minisite-layout-3 { display: flex; flex-direction: column; }
+}
+
+/* Player protegido (gaiola): remove foco visual do iframe do YouTube */
+.protected-player-iframe:focus {
+  outline: none;
+}

@@ -32,16 +32,69 @@ model Profile {
 }
 
 model MiniSite {
-  id              String   @id @default(uuid())
-  user_id         String   @map("user_id")
-  site_name       String?  @map("site_name")
-  slug            String?  @unique
-  bio             String?
-  layout_columns  Int?     @map("layout_columns")
-  theme           String?
-  created_at      DateTime @default(now()) @map("created_at")
-  updated_at      DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(uuid())
+  user_id              String   @map("user_id")
+  site_name            String?  @map("site_name")
+  slug                 String?  @unique
+  bio                  String?
+  layout_columns       Int?     @map("layout_columns")   // 1, 2 ou 3 colunas
+  theme                String?  // ex: "aluminio_anodizado" (preset de cores)
+  primary_color        String?  @map("primary_color")   // hex
+  accent_color         String?  @map("accent_color")    // hex
+  bg_color             String?  @map("bg_color")        // hex
+  cotacao_symbol       String?  @map("cotacao_symbol")
+  cotacao_label        String?  @map("cotacao_label")
+  subscription_plan    String?  @map("subscription_plan")   // free | monthly
+  monthly_price_usdc   String?  @map("monthly_price_usdc") // ex: "9.99"
+  next_billing_at      DateTime? @map("next_billing_at")   // próxima cobrança mensal
+  created_at           DateTime @default(now()) @map("created_at")
+  updated_at           DateTime @updatedAt @map("updated_at")
+  ideas                Idea[]
+  slug_listings        SlugListing[]
+  payments             Payment[]
   @@map("mini_sites")
+}
+
+// Venda de slug (mini site) — vendedor define preço em USDC
+model SlugListing {
+  id             String   @id @default(uuid())
+  mini_site_id   String   @unique @map("mini_site_id")
+  seller_wallet  String   @map("seller_wallet")   // carteira que recebe 90%
+  price_usdc     String   @map("price_usdc")      // ex: "100.00"
+  status         String   @default("active") @map("status")  // active | sold | cancelled
+  created_at     DateTime @default(now()) @map("created_at")
+  updated_at     DateTime @updatedAt @map("updated_at")
+  mini_site      MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  purchases      SlugPurchase[]
+  @@map("slug_listings")
+}
+
+// Compra de slug — comprador pagou; plataforma fica com 10%, vendedor recebe 90%
+model SlugPurchase {
+  id                  String      @id @default(uuid())
+  listing_id          String      @map("listing_id")
+  buyer_wallet        String      @map("buyer_wallet")
+  tx_hash             String?     @map("tx_hash")           // tx de pagamento USDC
+  amount_usdc         String      @map("amount_usdc")
+  platform_fee_usdc   String      @map("platform_fee_usdc")   // 10%
+  seller_receives_usdc String     @map("seller_receives_usdc") // 90%
+  seller_payout_tx_hash String?   @map("seller_payout_tx_hash") // quando plataforma enviar 90% ao vendedor
+  status              String      @default("completed") @map("status")  // completed | payout_pending | payout_done
+  completed_at        DateTime    @default(now()) @map("completed_at")
+  listing             SlugListing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+  @@map("slug_purchases")
+}
+
+// Ideias vinculadas ao mini site (Prisma)
+model Idea {
+  id          String   @id @default(uuid())
+  mini_site_id String  @map("mini_site_id")
+  title       String?
+  content     String?
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+  mini_site   MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  @@map("ideas")
 }
 
 // TrustBank: lista de wallets que são admin (governance). Sem Supabase.
@@ -51,4 +104,73 @@ model AdminWalletAddress {
   note           String?
   created_at     DateTime @default(now()) @map("created_at")
   @@map("admin_wallet_addresses")
+}
+
+// Criador com Google/YouTube verificado — só pode usar paywall quem provar ser dono do vídeo
+model Creator {
+  id                 String   @id @default(uuid())
+  google_id          String?  @unique @map("google_id")
+  email              String?  @map("email")
+  youtube_channel_id String?  @unique @map("youtube_channel_id")
+  payout_wallet      String?  @map("payout_wallet")   // carteira para receber parte do paywall
+  created_at         DateTime @default(now()) @map("created_at")
+  updated_at         DateTime @updatedAt @map("updated_at")
+  videos             Video[]
+  @@map("creators")
+}
+
+// Vídeo só aparece no painel com paywall se o dono foi verificado via YouTube API
+model Video {
+  id                 String        @id @default(uuid())
+  creator_id         String        @map("creator_id")
+  youtube_id         String        @unique @map("youtube_id")
+  channel_id         String        @map("channel_id")   // canal do YouTube (dono)
+  title              String?       @map("title")
+  thumbnail_url      String?       @map("thumbnail_url")
+  paywall_enabled    Boolean       @default(false) @map("paywall_enabled")
+  paywall_price_usdc String?       @map("paywall_price_usdc")
+  created_at         DateTime      @default(now()) @map("created_at")
+  updated_at         DateTime      @updatedAt @map("updated_at")
+  creator            Creator       @relation(fields: [creator_id], references: [id], onDelete: Cascade)
+  unlocks            VideoUnlock[]
+  @@map("videos")
+}
+
+// Paywall: quem desbloqueou qual vídeo (crypto ou cartão). viewer_id = wallet (0x...) ou "email:xxx"
+model VideoUnlock {
+  id            String   @id @default(uuid())
+  video_id      String   @map("video_id")
+  viewer_id     String   @map("viewer_id")      // wallet lowercase ou "email:user@x.com"
+  viewer_wallet String?  @map("viewer_wallet")
+  viewer_email  String?  @map("viewer_email")
+  tx_hash       String?  @map("tx_hash")
+  amount_usdc   String?  @map("amount_usdc")
+  payment_id    String?  @unique @map("payment_id")
+  paid_at       DateTime @default(now()) @map("paid_at")
+  video         Video    @relation(fields: [video_id], references: [id], onDelete: Cascade)
+  @@unique([video_id, viewer_id])
+  @@map("video_unlocks")
+}
+
+// Registro central de pagamentos (vídeo, slug, mensalidade, outros)
+// type: VIDEO_UNLOCK | SLUG_PURCHASE | MINISITE_SUBSCRIPTION | OTHER
+// payment_method: crypto (tx_hash) | card (stripe) — cartão é repassado em USDC ao beneficiário
+model Payment {
+  id                  String    @id @default(uuid())
+  type                String    @map("type")
+  amount_usdc         String    @map("amount_usdc")
+  payer_wallet        String?   @map("payer_wallet")   // opcional quando pago por cartão (email/google)
+  payer_email         String?   @map("payer_email")    // quando pagou com cartão
+  payment_method      String    @default("crypto") @map("payment_method")  // crypto | card
+  tx_hash             String?   @unique @map("tx_hash")         // blockchain (crypto)
+  stripe_payment_id   String?   @unique @map("stripe_payment_id") // Stripe payment_intent ou session (card)
+  reference_type      String?   @map("reference_type")
+  reference_id        String?   @map("reference_id")
+  status              String    @default("pending") @map("status")  // pending | verified | failed
+  verified_at         DateTime? @map("verified_at")
+  usdc_settlement_tx  String?   @map("usdc_settlement_tx")  // quando plataforma repassar em USDC ao criador/vendedor
+  created_at          DateTime  @default(now()) @map("created_at")
+  mini_site_id        String?   @map("mini_site_id")
+  mini_site           MiniSite? @relation(fields: [mini_site_id], references: [id], onDelete: SetNull)
+  @@map("payments")
 }

@@ -1,3 +1,6 @@
+import { Providers } from "@/components/Providers";
+import "./globals.css";
+
 export const metadata = {
   title: "TrustBank",
   description: "TrustBank",
@@ -10,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
