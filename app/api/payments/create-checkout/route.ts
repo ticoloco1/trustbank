@@ -63,8 +63,11 @@ export async function POST(request: NextRequest) {
       if (!listing || listing.status !== "active") {
         return NextResponse.json({ error: "listing_not_available" }, { status: 400 });
       }
-      amountUsdc = listing.price_usdc;
-      label = `Slug: ${listing.mini_site.slug || listing.mini_site.site_name || reference_id}`;
+      const isAuctionEnded =
+        listing.listing_type === "auction" && listing.end_at && new Date(listing.end_at) <= new Date();
+      amountUsdc = isAuctionEnded && listing.current_bid_usdc ? listing.current_bid_usdc : listing.price_usdc;
+      const slugLabel = listing.mini_site?.slug ?? listing.slug_value ?? reference_id;
+      label = `Slug: ${slugLabel}`;
     } else if (type === "MINISITE_SUBSCRIPTION") {
       const site = await prisma.miniSite.findUnique({
         where: { id: reference_id },
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: "payment",
-      success_url: success_url || `${baseUrl}/v/${reference_id}?paid=1`,
+      success_url: success_url || (type === "SLUG_PURCHASE" ? `${baseUrl}/market/${reference_id}?paid=1` : `${baseUrl}/v/${reference_id}?paid=1`),
       cancel_url: cancel_url || baseUrl,
       customer_email: customer_email || undefined,
       metadata: {

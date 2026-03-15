@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useAccount } from "wagmi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
@@ -33,13 +34,23 @@ type Video = {
 function DashboardContent() {
   const searchParams = useSearchParams();
   const { user, isAdmin, loading } = useAuth();
+  const { address } = useAccount();
   const [videoForm, setVideoForm] = useState({ youtubeUrl: "", paywallEnabled: false, paywallPriceUsdc: "" });
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const [standaloneSlugForm, setStandaloneSlugForm] = useState({
+    slug_value: "",
+    slug_type: "company" as "company" | "handle",
+    price_usdc: "12.90",
+    listing_type: "sale" as "sale" | "auction",
+    end_at: "",
+    min_bid_usdc: "1",
+  });
   const [form, setForm] = useState({
     site_name: "",
     slug: "",
     bio: "",
     layout_columns: 1 as 1 | 2 | 3,
+    theme: "",
     primary_color: "#6366f1",
     accent_color: "#ec4899",
     bg_color: "#080810",
@@ -123,6 +134,7 @@ function DashboardContent() {
           slug: payload.slug || null,
           bio: payload.bio || null,
           layout_columns: payload.layout_columns ?? 1,
+          theme: payload.theme || null,
           primary_color: payload.primary_color || null,
           accent_color: payload.accent_color || null,
           bg_color: payload.bg_color || null,
@@ -135,16 +147,40 @@ function DashboardContent() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mini-sites"] });
-      setForm({ site_name: "", slug: "", bio: "", layout_columns: 1, primary_color: "#6366f1", accent_color: "#ec4899", bg_color: "#080810", cotacao_symbol: "", cotacao_label: "" });
+      setForm({ site_name: "", slug: "", bio: "", layout_columns: 1, theme: "", primary_color: "#6366f1", accent_color: "#ec4899", bg_color: "#080810", cotacao_symbol: "", cotacao_label: "" });
     },
   });
 
-  if (loading) return <p style={{ padding: "2rem" }}>Carregando…</p>;
+  const listStandaloneSlugMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/slugs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug_value: standaloneSlugForm.slug_type === "handle" ? `@${standaloneSlugForm.slug_value.replace(/^@/, "")}` : standaloneSlugForm.slug_value.replace(/^@/, ""),
+          slug_type: standaloneSlugForm.slug_type,
+          seller_wallet: address?.toLowerCase(),
+          price_usdc: standaloneSlugForm.price_usdc,
+          listing_type: standaloneSlugForm.listing_type,
+          end_at: standaloneSlugForm.listing_type === "auction" && standaloneSlugForm.end_at ? standaloneSlugForm.end_at : undefined,
+          min_bid_usdc: standaloneSlugForm.listing_type === "auction" ? standaloneSlugForm.min_bid_usdc : undefined,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message || data.error || "Failed to list");
+      return data;
+    },
+    onSuccess: () => {
+      setStandaloneSlugForm((f) => ({ ...f, slug_value: "", price_usdc: "", end_at: "" }));
+    },
+  });
+
+  if (loading) return <p style={{ padding: "2rem" }}>Loading…</p>;
   if (!user && !isAdmin) {
     return (
       <main style={{ padding: "2rem", fontFamily: "system-ui" }}>
-        <p>Conecte sua carteira (e use uma wallet admin) para acessar o Governance.</p>
-        <Link href="/" style={{ color: "#0066cc" }}>← Voltar</Link>
+        <p>Connect your wallet (admin) to access the dashboard.</p>
+        <Link href="/" style={{ color: "#0066cc" }}>← Back</Link>
       </main>
     );
   }
@@ -152,16 +188,16 @@ function DashboardContent() {
   return (
     <main style={{ padding: "2rem", fontFamily: "system-ui", maxWidth: 800, margin: "0 auto" }}>
       <div style={{ marginBottom: "1.5rem" }}>
-        <Link href="/" style={{ color: "#666", textDecoration: "none" }}>← TrustBank</Link>
+        <Link href="/" style={{ color: "#666", textDecoration: "none" }}>← Home</Link>
       </div>
-      <h1>Governance — Mini sites</h1>
+      <h1>Dashboard — Mini sites</h1>
       <p style={{ color: "#555", marginBottom: "1.5rem" }}>
-        Crie e edite mini sites. Use <strong>slug</strong> para a URL: /s/<strong>slug</strong>.
-        Cotação: use <strong>BTC</strong> ou <strong>ETH</strong> em cotacao_symbol, ou texto em cotacao_label.
+        Create and edit mini sites. Use <strong>slug</strong> for the URL: /s/<strong>slug</strong>.
+        <Link href="/market" style={{ marginLeft: "0.5rem", color: "#0066cc" }}>Slug marketplace →</Link>
       </p>
 
       <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f6f6f6", borderRadius: 8 }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Criar mini site</h2>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Create mini site</h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -170,13 +206,13 @@ function DashboardContent() {
           style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 400 }}
         >
           <input
-            placeholder="Nome do site"
+            placeholder="Site name"
             value={form.site_name}
             onChange={(e) => setForm((f) => ({ ...f, site_name: e.target.value }))}
             style={{ padding: "0.5rem" }}
           />
           <input
-            placeholder="Slug (ex: meu-site)"
+            placeholder="Slug (e.g. my-site)"
             value={form.slug}
             onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
             style={{ padding: "0.5rem" }}
@@ -218,7 +254,7 @@ function DashboardContent() {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, primary_color: t.primary_color, accent_color: t.accent_color, bg_color: t.bg_color }))}
+                    onClick={() => setForm((f) => ({ ...f, theme: t.id, primary_color: t.primary_color, accent_color: t.accent_color, bg_color: t.bg_color }))}
                     title={t.name}
                     style={{
                       padding: "0.35rem 0.6rem",
@@ -262,17 +298,67 @@ function DashboardContent() {
             disabled={createMutation.isPending}
             style={{ padding: "0.5rem 1rem", background: "#333", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}
           >
-            {createMutation.isPending ? "Criando…" : "Criar mini site"}
+            {createMutation.isPending ? "Creating…" : "Create mini site"}
           </button>
         </form>
       </section>
 
+      {address && (
+        <section style={{ marginBottom: "2rem", padding: "1rem", background: "#eff6ff", borderRadius: 8, border: "1px solid #93c5fd" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>List company / @handle</h2>
+          <p style={{ fontSize: "0.9rem", color: "#1e40af", marginBottom: "0.75rem" }}>
+            Reserve a slug (e.g. <strong>acme</strong> or <strong>@acme</strong>) and list it for sale or auction. Buyer gets a new mini-site with that slug.
+          </p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (standaloneSlugForm.slug_value.trim() && standaloneSlugForm.price_usdc) listStandaloneSlugMutation.mutate();
+            }}
+            style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: 400 }}
+          >
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <input
+                placeholder="Slug (e.g. acme)"
+                value={standaloneSlugForm.slug_value}
+                onChange={(e) => setStandaloneSlugForm((f) => ({ ...f, slug_value: e.target.value.replace(/\s/g, "") }))}
+                style={{ padding: "0.5rem", flex: 1 }}
+              />
+              <label style={{ fontSize: "0.9rem", whiteSpace: "nowrap" }}>
+                <input type="radio" checked={standaloneSlugForm.slug_type === "company"} onChange={() => setStandaloneSlugForm((f) => ({ ...f, slug_type: "company" }))} /> /company
+              </label>
+              <label style={{ fontSize: "0.9rem", whiteSpace: "nowrap" }}>
+                <input type="radio" checked={standaloneSlugForm.slug_type === "handle"} onChange={() => setStandaloneSlugForm((f) => ({ ...f, slug_type: "handle" }))} /> @handle
+              </label>
+            </div>
+            <input
+              placeholder="12.90 (default)"
+              value={standaloneSlugForm.price_usdc}
+              onChange={(e) => setStandaloneSlugForm((f) => ({ ...f, price_usdc: e.target.value }))}
+              style={{ padding: "0.5rem" }}
+            />
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <label style={{ fontSize: "0.9rem" }}><input type="radio" checked={standaloneSlugForm.listing_type === "sale"} onChange={() => setStandaloneSlugForm((f) => ({ ...f, listing_type: "sale" }))} /> Sale</label>
+              <label style={{ fontSize: "0.9rem" }}><input type="radio" checked={standaloneSlugForm.listing_type === "auction"} onChange={() => setStandaloneSlugForm((f) => ({ ...f, listing_type: "auction" }))} /> Auction</label>
+            </div>
+            {standaloneSlugForm.listing_type === "auction" && (
+              <>
+                <input type="datetime-local" value={standaloneSlugForm.end_at} onChange={(e) => setStandaloneSlugForm((f) => ({ ...f, end_at: e.target.value }))} style={{ padding: "0.5rem" }} />
+                <input placeholder="Min bid increment (USDC)" value={standaloneSlugForm.min_bid_usdc} onChange={(e) => setStandaloneSlugForm((f) => ({ ...f, min_bid_usdc: e.target.value }))} style={{ padding: "0.5rem" }} />
+              </>
+            )}
+            <button type="submit" disabled={listStandaloneSlugMutation.isPending || !standaloneSlugForm.slug_value.trim() || !standaloneSlugForm.price_usdc} style={{ padding: "0.5rem 1rem", background: "#2563eb", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}>
+              {listStandaloneSlugMutation.isPending ? "Listing…" : "List on marketplace"}
+            </button>
+          </form>
+        </section>
+      )}
+
       <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Mini sites</h2>
         {isLoading ? (
-          <p>Carregando…</p>
+          <p>Loading…</p>
         ) : miniSites.length === 0 ? (
-          <p style={{ color: "#666" }}>Nenhum mini site ainda. Crie um acima.</p>
+          <p style={{ color: "#666" }}>No mini sites yet. Create one above.</p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {miniSites.map((s) => (
@@ -295,7 +381,7 @@ function DashboardContent() {
                   {s.slug && (
                     <span style={{ marginLeft: "0.5rem", color: "#666" }}>/s/{s.slug}</span>
                   )}
-                  {s._count && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#888" }}>({s._count.ideas} ideias)</span>}
+                  {s._count && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#888" }}>({s._count.ideas} ideas)</span>}
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   {s.slug && (
@@ -303,14 +389,14 @@ function DashboardContent() {
                       href={`/s/${s.slug}`}
                       style={{ padding: "0.25rem 0.5rem", background: "#eee", borderRadius: 4, textDecoration: "none", color: "#333", fontSize: "0.9rem" }}
                     >
-                      Ver
+                      View
                     </Link>
                   )}
                   <Link
                     href={`/dashboard/${s.id}`}
                     style={{ padding: "0.25rem 0.5rem", background: "#333", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.9rem" }}
                   >
-                    Editar
+                    Edit
                   </Link>
                 </div>
               </li>

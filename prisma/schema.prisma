@@ -47,6 +47,8 @@ model MiniSite {
   subscription_plan    String?  @map("subscription_plan")   // free | monthly
   monthly_price_usdc   String?  @map("monthly_price_usdc") // ex: "9.99"
   next_billing_at      DateTime? @map("next_billing_at")   // próxima cobrança mensal
+  slug_annual_renewal_usdc String? @map("slug_annual_renewal_usdc")  // standalone slug: 12.90/year after first year
+  next_slug_renewal_at DateTime? @map("next_slug_renewal_at")        // when to charge annual slug renewal
   created_at           DateTime @default(now()) @map("created_at")
   updated_at           DateTime @updatedAt @map("updated_at")
   ideas                Idea[]
@@ -55,18 +57,37 @@ model MiniSite {
   @@map("mini_sites")
 }
 
-// Venda de slug (mini site) — vendedor define preço em USDC
+// Slug listing: sell or auction. Mini site slug or company/@ handle. Shown on main site + mini sites.
 model SlugListing {
-  id             String   @id @default(uuid())
-  mini_site_id   String   @unique @map("mini_site_id")
-  seller_wallet  String   @map("seller_wallet")   // carteira que recebe 90%
-  price_usdc     String   @map("price_usdc")      // ex: "100.00"
-  status         String   @default("active") @map("status")  // active | sold | cancelled
-  created_at     DateTime @default(now()) @map("created_at")
-  updated_at     DateTime @updatedAt @map("updated_at")
-  mini_site      MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
-  purchases      SlugPurchase[]
+  id                String    @id @default(uuid())
+  mini_site_id      String?   @unique @map("mini_site_id")   // when selling existing mini site
+  slug_value        String?   @map("slug_value")             // e.g. "acme" or "@acme" (company/handle)
+  slug_type         String    @default("minisite") @map("slug_type")  // minisite | company | handle
+  seller_wallet     String   @map("seller_wallet")
+  listing_type      String   @default("sale") @map("listing_type")   // sale | auction
+  price_usdc        String   @map("price_usdc")              // buy-now price (sale) or starting/min (auction)
+  min_bid_usdc      String?  @map("min_bid_usdc")            // auction: minimum bid increment
+  current_bid_usdc   String?  @map("current_bid_usdc")        // auction: current highest bid
+  end_at            DateTime? @map("end_at")                 // auction: end time
+  status            String   @default("active") @map("status")  // active | sold | cancelled
+  created_at        DateTime  @default(now()) @map("created_at")
+  updated_at        DateTime  @updatedAt @map("updated_at")
+  mini_site         MiniSite? @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  purchases         SlugPurchase[]
+  bids              SlugBid[]
   @@map("slug_listings")
+}
+
+// Auction bid for a slug listing
+model SlugBid {
+  id             String      @id @default(uuid())
+  listing_id     String      @map("listing_id")
+  bidder_wallet  String      @map("bidder_wallet")
+  amount_usdc    String      @map("amount_usdc")
+  created_at     DateTime    @default(now()) @map("created_at")
+  listing        SlugListing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+  @@index([listing_id])
+  @@map("slug_bids")
 }
 
 // Compra de slug — comprador pagou; plataforma fica com 10%, vendedor recebe 90%
@@ -169,6 +190,8 @@ model Payment {
   status              String    @default("pending") @map("status")  // pending | verified | failed
   verified_at         DateTime? @map("verified_at")
   usdc_settlement_tx  String?   @map("usdc_settlement_tx")  // quando plataforma repassar em USDC ao criador/vendedor
+  creator_share_usdc  String?   @map("creator_share_usdc")  // video paywall 60% (payout to creator)
+  platform_share_usdc String?   @map("platform_share_usdc") // video paywall 40%, slug 10%, etc.
   created_at          DateTime  @default(now()) @map("created_at")
   mini_site_id        String?   @map("mini_site_id")
   mini_site           MiniSite? @relation(fields: [mini_site_id], references: [id], onDelete: SetNull)

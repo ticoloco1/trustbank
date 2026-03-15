@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { getPlatformWallet } from "@/lib/payment-config";
 
 /**
  * GET /api/payments/config
@@ -10,9 +11,9 @@ export async function GET(request: Request) {
   const prisma = getPrisma();
   if (!prisma) return NextResponse.json({ error: "Prisma not configured" }, { status: 503 });
 
-  const platformWallet = process.env.PLATFORM_WALLET;
+  const platformWallet = getPlatformWallet();
   if (!platformWallet) {
-    return NextResponse.json({ error: "PLATFORM_WALLET não configurado" }, { status: 503 });
+    return NextResponse.json({ error: "Platform wallet not configured" }, { status: 503 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -45,10 +46,14 @@ export async function GET(request: Request) {
       include: { mini_site: { select: { site_name: true, slug: true } } },
     });
     if (!listing || listing.status !== "active") {
-      return NextResponse.json({ error: "Listagem não disponível" }, { status: 404 });
+      return NextResponse.json({ error: "Listing not available" }, { status: 404 });
     }
-    amount_usdc = listing.price_usdc;
-    label = `Compra slug: ${listing.mini_site.slug || listing.mini_site.site_name || referenceId}`;
+    const isAuctionEnded =
+      listing.listing_type === "auction" && listing.end_at && new Date(listing.end_at) <= new Date();
+    amount_usdc =
+      isAuctionEnded && listing.current_bid_usdc ? listing.current_bid_usdc : listing.price_usdc;
+    const slugLabel = listing.mini_site?.slug ?? listing.slug_value ?? referenceId;
+    label = `Slug: ${slugLabel}`;
   } else if (type === "MINISITE_SUBSCRIPTION") {
     const site = await prisma.miniSite.findUnique({
       where: { id: referenceId },
@@ -63,12 +68,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
   }
 
+  const acceptedChains: string[] = [];
+  if (process.env.ETH_RPC_URL || process.env.CHAIN_RPC_URL) acceptedChains.push("ethereum");
+  if (process.env.POLYGON_RPC_URL) acceptedChains.push("polygon");
+
   return NextResponse.json({
     destination_wallet: platformWallet,
     amount_usdc,
     label,
     type,
     reference_id: referenceId,
-    message: "Envie exatamente este valor em USDC para destination_wallet. Depois chame POST /api/payments/verify com o tx_hash.",
+    accepted_chains: acceptedChains.length ? acceptedChains : ["ethereum"],
+    message: "Send this amount in USDC to destination_wallet (Ethereum or Polygon). Then call POST /api/payments/verify with tx_hash.",
   });
 }

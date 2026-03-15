@@ -1,9 +1,12 @@
 /**
  * Verificação de pagamento USDC na chain (ERC-20 Transfer).
- * Requer: CHAIN_RPC_URL, PLATFORM_WALLET, opcionalmente USDC_CONTRACT_ADDRESS.
+ * Aceita USDC na Ethereum ou na Polygon: tenta obter o receipt em cada rede até achar a tx.
+ * Env: PLATFORM_WALLET (obrigatório); ETH_RPC_URL ou CHAIN_RPC_URL (Ethereum); POLYGON_RPC_URL (Polygon);
+ * USDC_CONTRACT_ADDRESS ou USDC_ETH_CONTRACT; USDC_POLYGON_CONTRACT (opcionais).
  */
 import { createPublicClient, http, decodeEventLog, type Address } from "viem";
 import { mainnet, polygon } from "viem/chains";
+import { getPlatformWallet } from "./payment-config";
 
 const ERC20_ABI = [
   {
@@ -19,84 +22,143 @@ const ERC20_ABI = [
 
 const USDC_DECIMALS = 6;
 
+// Default USDC contract addresses when not set via env
+const USDC_ETH_MAINNET = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as Address;
+const USDC_POLYGON_DEFAULT = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as Address; // native USDC on Polygon
+
 export type VerifyPaymentResult =
-  | { success: true; amount: string; from: Address }
+  | { success: true; amount: string; from: Address; chain: "ethereum" | "polygon" }
   | { success: false; error: string };
+
+type ChainConfig = {
+  name: "ethereum" | "polygon";
+  rpcUrl: string;
+  chain: typeof mainnet | typeof polygon;
+  usdcContract: Address | undefined;
+};
+
+function getChainConfigs(platformWallet: Address): ChainConfig[] {
+  const configs: ChainConfig[] = [];
+  const ethRpc = process.env.ETH_RPC_URL || process.env.CHAIN_RPC_URL;
+  const polygonRpc = process.env.POLYGON_RPC_URL;
+  const usdcEth = (process.env.USDC_ETH_CONTRACT || process.env.USDC_CONTRACT_ADDRESS || USDC_ETH_MAINNET) as Address;
+  const usdcPolygon = (process.env.USDC_POLYGON_CONTRACT || USDC_POLYGON_DEFAULT) as Address;
+
+  if (ethRpc) {
+    configs.push({
+      name: "ethereum",
+      rpcUrl: ethRpc,
+      chain: mainnet,
+      usdcContract: usdcEth,
+    });
+  }
+  if (polygonRpc) {
+    configs.push({
+      name: "polygon",
+      rpcUrl: polygonRpc,
+      chain: polygon,
+      usdcContract: usdcPolygon,
+    });
+  }
+  return configs;
+}
+
+function verifyReceipt(params: {
+  receipt: { logs: { address: string; data: `0x${string}`; topics: `0x${string}`[] }[] };
+  usdcContract: Address | undefined;
+  to: string;
+  minAmountUsdc?: number;
+}): VerifyPaymentResult | null {
+  const { receipt, usdcContract, to, minAmountUsdc } = params;
+  let foundAmount: bigint = BigInt(0);
+  let foundFrom: Address | null = null;
+
+  for (const log of receipt.logs) {
+    if (usdcContract && log.address.toLowerCase() !== usdcContract.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: ERC20_ABI,
+        data: log.data,
+        topics: log.topics,
+      });
+      if (decoded.eventName === "Transfer") {
+        const args = decoded.args as { from: Address; to: Address; value: bigint };
+        if (args.to.toLowerCase() === to) {
+          foundAmount += args.value;
+          if (!foundFrom) foundFrom = args.from;
+        }
+      }
+    } catch {
+      // ignore logs that aren't Transfer
+    }
+  }
+
+  if (foundAmount === BigInt(0) || !foundFrom) {
+    return null;
+  }
+
+  const amountHuman = Number(foundAmount) / 10 ** USDC_DECIMALS;
+  if (minAmountUsdc != null && amountHuman < minAmountUsdc) {
+    return {
+      success: false,
+      error: `Amount received ${amountHuman.toFixed(2)} USDC is below minimum ${minAmountUsdc}`,
+    };
+  }
+
+  return {
+    success: true,
+    amount: amountHuman.toFixed(USDC_DECIMALS),
+    from: foundFrom,
+    chain: "ethereum", // will be overwritten by caller
+  };
+}
 
 export async function verifyUsdcPayment(params: {
   txHash: string;
-  expectedTo?: string; // PLATFORM_WALLET
+  expectedTo?: string;
   minAmountUsdc?: number;
 }): Promise<VerifyPaymentResult> {
-  const rpcUrl = process.env.CHAIN_RPC_URL;
-  const platformWallet = (process.env.PLATFORM_WALLET || "").toLowerCase() as Address;
-  const usdcContract = process.env.USDC_CONTRACT_ADDRESS as Address | undefined;
-
-  if (!rpcUrl) {
-    return { success: false, error: "CHAIN_RPC_URL não configurado" };
-  }
+  const platformWallet = getPlatformWallet() as Address;
   const to = (params.expectedTo || platformWallet).toLowerCase();
   if (!to || !to.startsWith("0x")) {
-    return { success: false, error: "PLATFORM_WALLET não configurado" };
+    return { success: false, error: "PLATFORM_WALLET not configured" };
   }
 
-  try {
-    const chainId = process.env.CHAIN_ID ? parseInt(process.env.CHAIN_ID, 10) : mainnet.id;
-    const chain = chainId === 137 ? polygon : mainnet;
-    const client = createPublicClient({
-      chain,
-      transport: http(rpcUrl),
-    });
+  const configs = getChainConfigs(platformWallet as Address);
+  if (configs.length === 0) {
+    return { success: false, error: "Configure at least one of ETH_RPC_URL, CHAIN_RPC_URL or POLYGON_RPC_URL" };
+  }
 
-    const receipt = await client.getTransactionReceipt({
-      hash: params.txHash as `0x${string}`,
-    });
-    if (!receipt || receipt.status !== "success") {
-      return { success: false, error: "Transação não encontrada ou falhou" };
-    }
+  const txHash = params.txHash as `0x${string}`;
 
-    let foundAmount: bigint = BigInt(0);
-    let foundFrom: Address | null = null;
-
-    for (const log of receipt.logs) {
-      if (usdcContract && log.address.toLowerCase() !== usdcContract.toLowerCase()) continue;
-      try {
-        const decoded = decodeEventLog({
-          abi: ERC20_ABI,
-          data: log.data,
-          topics: log.topics,
-        });
-        if (decoded.eventName === "Transfer") {
-          const args = decoded.args as { from: Address; to: Address; value: bigint };
-          if (args.to.toLowerCase() === to) {
-            foundAmount += args.value;
-            if (!foundFrom) foundFrom = args.from;
-          }
-        }
-      } catch {
-        // ignore logs that aren't Transfer
+  for (const cfg of configs) {
+    try {
+      const client = createPublicClient({
+        chain: cfg.chain,
+        transport: http(cfg.rpcUrl),
+      });
+      const receipt = await client.getTransactionReceipt({ hash: txHash });
+      if (!receipt) continue;
+      if (receipt.status !== "success") {
+        return { success: false, error: "Transaction failed on chain" };
       }
+      const result = verifyReceipt({
+        receipt,
+        usdcContract: cfg.usdcContract,
+        to,
+        minAmountUsdc: params.minAmountUsdc,
+      });
+      if (result === null) continue; // no USDC transfer to platform on this chain, try next
+      if (!result.success) return result;
+      return { ...result, chain: cfg.name };
+    } catch {
+      // tx not on this chain or RPC error, try next
+      continue;
     }
-
-    if (foundAmount === BigInt(0) || !foundFrom) {
-      return { success: false, error: "Nenhuma transferência USDC para a carteira da plataforma nesta tx" };
-    }
-
-    const amountHuman = Number(foundAmount) / 10 ** USDC_DECIMALS;
-    if (params.minAmountUsdc != null && amountHuman < params.minAmountUsdc) {
-      return {
-        success: false,
-        error: `Valor recebido ${amountHuman.toFixed(2)} USDC é menor que o mínimo ${params.minAmountUsdc}`,
-      };
-    }
-
-    return {
-      success: true,
-      amount: amountHuman.toFixed(USDC_DECIMALS),
-      from: foundFrom,
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erro ao verificar transação";
-    return { success: false, error: msg };
   }
+
+  return {
+    success: false,
+    error: "Transaction not found or no USDC transfer to platform wallet on Ethereum or Polygon",
+  };
 }

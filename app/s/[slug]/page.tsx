@@ -169,6 +169,33 @@ export default async function MiniSitePage({ params }: Props) {
             </>
           )}
         </div>
+
+        <section
+          style={{
+            marginTop: "2rem",
+            padding: "1rem",
+            background: "rgba(0,0,0,0.04)",
+            borderRadius: 8,
+            borderLeft: `4px solid ${accent}`,
+          }}
+        >
+          <h2 style={{ fontSize: "0.95rem", margin: "0 0 0.5rem", color: primary }}>Slug marketplace</h2>
+          <p style={{ margin: 0, fontSize: "0.9rem", color: "#555" }}>
+            Buy or auction company slugs and @handles. List this mini-site or reserve a name.
+          </p>
+          <Link
+            href="/market"
+            style={{
+              display: "inline-block",
+              marginTop: "0.5rem",
+              color: accent,
+              fontWeight: 600,
+              fontSize: "0.9rem",
+            }}
+          >
+            Browse marketplace →
+          </Link>
+        </section>
       </div>
     </main>
   );

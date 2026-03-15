@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-
-const PLATFORM_FEE_PERCENT = 10;
+import { splitSlugSale, STANDALONE_SLUG_ANNUAL_USD } from "@/lib/payment-config";
 
 /**
  * POST /api/slugs/buy — compra um slug (mini site) listado.
@@ -51,23 +50,34 @@ export async function POST(request: NextRequest) {
 
     const priceNum = parseFloat(listing.price_usdc);
     if (isNaN(priceNum) || priceNum <= 0) {
-      return NextResponse.json({ error: "invalid_price", message: "Preço inválido." }, { status: 400 });
+      return NextResponse.json({ error: "invalid_price", message: "Invalid price." }, { status: 400 });
     }
 
-    const platformFee = (priceNum * PLATFORM_FEE_PERCENT) / 100;
-    const sellerReceives = priceNum - platformFee;
-    const platformFeeStr = platformFee.toFixed(2);
-    const sellerReceivesStr = sellerReceives.toFixed(2);
+    const { platform_fee_usdc: platformFeeStr, seller_receives_usdc: sellerReceivesStr } = splitSlugSale(priceNum);
 
     await prisma.$transaction(async (tx) => {
       await tx.slugListing.update({
         where: { id: listing_id },
         data: { status: "sold", updated_at: new Date() },
       });
-      await tx.miniSite.update({
-        where: { id: listing.mini_site_id },
-        data: { user_id: buyer, updated_at: new Date() },
-      });
+      if (listing.mini_site_id) {
+        await tx.miniSite.update({
+          where: { id: listing.mini_site_id },
+          data: { user_id: buyer, updated_at: new Date() },
+        });
+      } else if (listing.slug_value) {
+        const nextRenewal = new Date();
+        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+        await tx.miniSite.create({
+          data: {
+            user_id: buyer,
+            slug: listing.slug_value,
+            site_name: listing.slug_value.replace(/^@/, ""),
+            slug_annual_renewal_usdc: STANDALONE_SLUG_ANNUAL_USD,
+            next_slug_renewal_at: nextRenewal,
+          },
+        });
+      }
       await tx.slugPurchase.create({
         data: {
           listing_id,

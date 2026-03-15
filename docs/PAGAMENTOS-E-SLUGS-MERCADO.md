@@ -52,12 +52,14 @@
 - **GET /api/payments?wallet=0x...&type=...&limit=50** — Lista pagamentos (por carteira ou tipo).
 - **Mensalidade**: em `MiniSite` foram adicionados `subscription_plan`, `monthly_price_usdc`, `next_billing_at`. No dashboard (editar mini site) é possível definir o preço mensal em USDC; o pagamento é feito via config + verify (MINISITE_SUBSCRIPTION).
 
-## Variáveis de ambiente
+## Variáveis de ambiente (USDC — Ethereum e/ou Polygon)
 
-- `PLATFORM_WALLET` — carteira que recebe todos os pagamentos.
-- `CHAIN_RPC_URL` — RPC para verificação de tx (ex.: Polygon).
-- `CHAIN_ID` — opcional; 137 para Polygon, 1 para Ethereum.
-- `USDC_CONTRACT_ADDRESS` — opcional; filtra logs por contrato USDC.
+A verificação de pagamento aceita **USDC na Ethereum ou na Polygon**. O backend tenta localizar a transação em cada rede configurada até achar a tx.
+
+- `PLATFORM_WALLET` — opcional. Se não definido, usa o **contrato Remix** `0x578ac1c44E41f3ecfBaf3bEb86363FD3dd857011` (pagamentos e distribuição). Se definido, os pagamentos são enviados para esse endereço.
+- **Ethereum**: `ETH_RPC_URL` ou `CHAIN_RPC_URL` — RPC da Ethereum (ex.: Infura, Alchemy). Opcional: `USDC_ETH_CONTRACT` ou `USDC_CONTRACT_ADDRESS` (default: USDC mainnet).
+- **Polygon**: `POLYGON_RPC_URL` — RPC da Polygon. Opcional: `USDC_POLYGON_CONTRACT` (default: USDC nativo na Polygon).
+- Se ambos estiverem configurados, o usuário pode pagar em USDC em qualquer uma das redes; o verify tenta as duas até encontrar o `tx_hash`.
 - `REQUIRE_PAYWALL_TX` — se `true`, o endpoint antigo `/api/paywall/unlock` exige `tx_hash`.
 
 ## APIs do mercado de slugs
