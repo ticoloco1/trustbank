@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
           current_bid_usdc: null,
           end_at: endAt,
           status: "active",
-          ...(updatePayload.slug_value && { slug_value: updatePayload.slug_value as string, slug_type: updatePayload.slug_type as string }),
+          ...(updatePayload.slug_value ? { slug_value: updatePayload.slug_value as string, slug_type: updatePayload.slug_type as string } : {}),
         },
         include: { mini_site: { select: { site_name: true, slug: true } } },
       });

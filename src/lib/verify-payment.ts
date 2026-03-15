@@ -79,7 +79,7 @@ function verifyReceipt(params: {
       const decoded = decodeEventLog({
         abi: ERC20_ABI,
         data: log.data,
-        topics: log.topics,
+        topics: log.topics as [`0x${string}`, ...`0x${string}`[]],
       });
       if (decoded.eventName === "Transfer") {
         const args = decoded.args as { from: Address; to: Address; value: bigint };

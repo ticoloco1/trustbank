@@ -45,10 +45,16 @@ function DashboardContent() {
     end_at: "",
     min_bid_usdc: "1",
   });
+  const [apiKeysForm, setApiKeysForm] = useState({
+    google_client_id: "",
+    google_client_secret: "",
+    youtube_api_key: "",
+  });
   const [form, setForm] = useState({
     site_name: "",
     slug: "",
     bio: "",
+    template: "default" as "default" | "investor",
     layout_columns: 1 as 1 | 2 | 3,
     theme: "",
     primary_color: "#6366f1",
@@ -85,6 +91,46 @@ function DashboardContent() {
       return r.json() as Promise<Video[]>;
     },
     enabled: !!googleSession?.user,
+  });
+
+  const { data: apiKeysStatus, refetch: refetchApiKeys } = useQuery({
+    queryKey: ["admin-api-keys", address, isAdmin],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/keys?wallet=${encodeURIComponent(address ?? "")}`);
+      if (!r.ok) throw new Error("Forbidden");
+      return r.json() as Promise<{
+        google_client_id_set: boolean;
+        google_client_secret_set: boolean;
+        youtube_api_key_set: boolean;
+        google_client_id: string;
+        google_client_secret: string;
+        youtube_api_key: string;
+      }>;
+    },
+    enabled: !!address && !!isAdmin,
+  });
+
+  const saveApiKeysMutation = useMutation({
+    mutationFn: async (payload: { google_client_id?: string; google_client_secret?: string; youtube_api_key?: string }) => {
+      const body: { admin_wallet: string; google_client_id?: string; google_client_secret?: string; youtube_api_key?: string } = {
+        admin_wallet: address!,
+      };
+      if (payload.google_client_id?.trim()) body.google_client_id = payload.google_client_id.trim();
+      if (payload.google_client_secret?.trim()) body.google_client_secret = payload.google_client_secret.trim();
+      if (payload.youtube_api_key?.trim()) body.youtube_api_key = payload.youtube_api_key.trim();
+      const r = await fetch("/api/admin/keys", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Failed to save");
+      return data;
+    },
+    onSuccess: () => {
+      refetchApiKeys();
+      setApiKeysForm({ google_client_id: "", google_client_secret: "", youtube_api_key: "" });
+    },
   });
 
   const addVideoMutation = useMutation({
@@ -133,6 +179,7 @@ function DashboardContent() {
           site_name: payload.site_name || null,
           slug: payload.slug || null,
           bio: payload.bio || null,
+          template: payload.template ?? "default",
           layout_columns: payload.layout_columns ?? 1,
           theme: payload.theme || null,
           primary_color: payload.primary_color || null,
@@ -147,7 +194,7 @@ function DashboardContent() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mini-sites"] });
-      setForm({ site_name: "", slug: "", bio: "", layout_columns: 1, theme: "", primary_color: "#6366f1", accent_color: "#ec4899", bg_color: "#080810", cotacao_symbol: "", cotacao_label: "" });
+      setForm({ site_name: "", slug: "", bio: "", template: "default", layout_columns: 1, theme: "", primary_color: "#6366f1", accent_color: "#ec4899", bg_color: "#080810", cotacao_symbol: "", cotacao_label: "" });
     },
   });
 
@@ -224,6 +271,39 @@ function DashboardContent() {
             rows={2}
             style={{ padding: "0.5rem" }}
           />
+          <div>
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Template</label>
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, template: "default" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: form.template === "default" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: form.template === "default" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Default layout
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, template: "investor" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: form.template === "investor" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: form.template === "investor" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Investor feed (crypto, NFTs, feed)
+              </button>
+            </div>
+          </div>
           <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Layout (colunas)</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -349,6 +429,75 @@ function DashboardContent() {
             <button type="submit" disabled={listStandaloneSlugMutation.isPending || !standaloneSlugForm.slug_value.trim() || !standaloneSlugForm.price_usdc} style={{ padding: "0.5rem 1rem", background: "#2563eb", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}>
               {listStandaloneSlugMutation.isPending ? "Listing…" : "List on marketplace"}
             </button>
+          </form>
+        </section>
+      )}
+
+      {isAdmin && address && (
+        <section style={{ marginBottom: "2rem", padding: "1rem", background: "#fefce8", borderRadius: 8, border: "1px solid #eab308" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>API keys (admin)</h2>
+          <p style={{ fontSize: "0.9rem", color: "#713f12", marginBottom: "1rem" }}>
+            Configure Google OAuth and YouTube API here. Values are stored in the database and override environment variables. Leave a field blank to keep the current value.
+          </p>
+          {apiKeysStatus && (
+            <p style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.75rem" }}>
+              Status: Google Client ID {apiKeysStatus.google_client_id_set ? "✓ set" : "— not set"} · Client Secret {apiKeysStatus.google_client_secret_set ? "✓ set" : "— not set"} · YouTube API Key {apiKeysStatus.youtube_api_key_set ? "✓ set" : "— not set"}
+            </p>
+          )}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!apiKeysForm.google_client_id.trim() && !apiKeysForm.google_client_secret.trim() && !apiKeysForm.youtube_api_key.trim()) return;
+              saveApiKeysMutation.mutate(apiKeysForm);
+            }}
+            style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 520 }}
+          >
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>Google Client ID</label>
+              <input
+                type="password"
+                placeholder={apiKeysStatus?.google_client_id_set ? "•••••••• (enter new to replace)" : "Paste Client ID"}
+                value={apiKeysForm.google_client_id}
+                onChange={(e) => setApiKeysForm((f) => ({ ...f, google_client_id: e.target.value }))}
+                style={{ width: "100%", padding: "0.5rem", fontFamily: "monospace", fontSize: "0.9rem" }}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>Google Client Secret</label>
+              <input
+                type="password"
+                placeholder={apiKeysStatus?.google_client_secret_set ? "•••••••• (enter new to replace)" : "Paste Client Secret"}
+                value={apiKeysForm.google_client_secret}
+                onChange={(e) => setApiKeysForm((f) => ({ ...f, google_client_secret: e.target.value }))}
+                style={{ width: "100%", padding: "0.5rem", fontFamily: "monospace", fontSize: "0.9rem" }}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>YouTube API Key</label>
+              <input
+                type="password"
+                placeholder={apiKeysStatus?.youtube_api_key_set ? "•••••••• (enter new to replace)" : "Paste YouTube API Key"}
+                value={apiKeysForm.youtube_api_key}
+                onChange={(e) => setApiKeysForm((f) => ({ ...f, youtube_api_key: e.target.value }))}
+                style={{ width: "100%", padding: "0.5rem", fontFamily: "monospace", fontSize: "0.9rem" }}
+                autoComplete="off"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={saveApiKeysMutation.isPending || (!apiKeysForm.google_client_id.trim() && !apiKeysForm.google_client_secret.trim() && !apiKeysForm.youtube_api_key.trim())}
+              style={{ padding: "0.5rem 1rem", background: "#ca8a04", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}
+            >
+              {saveApiKeysMutation.isPending ? "Saving…" : "Save keys"}
+            </button>
+            {saveApiKeysMutation.isError && (
+              <p style={{ color: "#b91c1c", fontSize: "0.9rem" }}>{(saveApiKeysMutation.error as Error).message}</p>
+            )}
+            {saveApiKeysMutation.isSuccess && (
+              <p style={{ color: "#15803d", fontSize: "0.9rem" }}>Keys updated. Login and YouTube features will use these values.</p>
+            )}
           </form>
         </section>
       )}

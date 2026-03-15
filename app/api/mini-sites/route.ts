@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     slug?: string;
     bio?: string;
     layout_columns?: number;
+    template?: string;
     theme?: string;
     primary_color?: string;
     accent_color?: string;
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
       slug: body.slug ?? null,
       bio: body.bio ?? null,
       layout_columns: body.layout_columns ?? null,
+      template: body.template ?? "default",
       theme: body.theme ?? null,
       primary_color: body.primary_color ?? null,
       accent_color: body.accent_color ?? null,

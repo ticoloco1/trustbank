@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getPrisma } from "@/lib/prisma";
 import { CotacaoBlock } from "./CotacaoBlock";
+import InvestorTemplate from "./InvestorTemplate";
 import Link from "next/link";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -15,6 +16,22 @@ export default async function MiniSitePage({ params }: Props) {
     include: { ideas: { orderBy: { created_at: "desc" } } },
   });
   if (!site) notFound();
+
+  if (site.template === "investor") {
+    return (
+      <InvestorTemplate
+        site={{
+          site_name: site.site_name,
+          slug: site.slug,
+          bio: site.bio,
+          primary_color: site.primary_color,
+          accent_color: site.accent_color,
+          bg_color: site.bg_color,
+          ideas: site.ideas,
+        }}
+      />
+    );
+  }
 
   const cols = site.layout_columns ?? 1;
   const layoutClass = `minisite-layout-${cols}` as "minisite-layout-1" | "minisite-layout-2" | "minisite-layout-3";

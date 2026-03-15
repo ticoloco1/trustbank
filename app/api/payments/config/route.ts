@@ -71,6 +71,7 @@ export async function GET(request: Request) {
   const acceptedChains: string[] = [];
   if (process.env.ETH_RPC_URL || process.env.CHAIN_RPC_URL) acceptedChains.push("ethereum");
   if (process.env.POLYGON_RPC_URL) acceptedChains.push("polygon");
+  const blockchain_verification_available = acceptedChains.length > 0;
 
   return NextResponse.json({
     destination_wallet: platformWallet,
@@ -79,6 +80,9 @@ export async function GET(request: Request) {
     type,
     reference_id: referenceId,
     accepted_chains: acceptedChains.length ? acceptedChains : ["ethereum"],
-    message: "Send this amount in USDC to destination_wallet (Ethereum or Polygon). Then call POST /api/payments/verify with tx_hash.",
+    blockchain_verification_available,
+    message: blockchain_verification_available
+      ? "Send this amount in USDC to destination_wallet (Ethereum or Polygon). Then call POST /api/payments/verify with tx_hash."
+      : "Send this amount in USDC to destination_wallet. Set ETH_RPC_URL or POLYGON_RPC_URL in env to enable tx verification.",
   });
 }

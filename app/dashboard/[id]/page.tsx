@@ -15,6 +15,7 @@ type MiniSite = {
   slug: string | null;
   bio: string | null;
   layout_columns: number | null;
+  template: string | null;
   theme: string | null;
   primary_color: string | null;
   accent_color: string | null;
@@ -171,6 +172,39 @@ export default function EditMiniSitePage() {
             rows={2}
             style={{ padding: "0.5rem" }}
           />
+          <div>
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Template</label>
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <button
+                type="button"
+                onClick={() => setEdit((s) => ({ ...s, template: "default" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (edit.template ?? "default") === "default" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (edit.template ?? "default") === "default" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Default layout
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((s) => ({ ...s, template: "investor" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (edit.template ?? "default") === "investor" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (edit.template ?? "default") === "investor" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Investor feed (crypto, NFTs, feed)
+              </button>
+            </div>
+          </div>
           <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Layout (columns)</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>

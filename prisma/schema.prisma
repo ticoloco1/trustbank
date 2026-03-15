@@ -16,6 +16,9 @@ model PlatformSetting {
   logo_url              String?  @map("logo_url")
   hero_text             String?  @map("hero_text")
   grid_columns         Int?     @map("grid_columns")
+  google_client_id      String?  @map("google_client_id")      // admin panel; fallback: env
+  google_client_secret  String?  @map("google_client_secret")
+  youtube_api_key      String?  @map("youtube_api_key")
   updated_at            DateTime @updatedAt @map("updated_at")
   @@map("platform_settings")
 }
@@ -38,6 +41,7 @@ model MiniSite {
   slug                 String?  @unique
   bio                  String?
   layout_columns       Int?     @map("layout_columns")   // 1, 2 ou 3 colunas
+  template             String?  @default("default")     // default | investor (feed estilo investidor)
   theme                String?  // ex: "aluminio_anodizado" (preset de cores)
   primary_color        String?  @map("primary_color")   // hex
   accent_color         String?  @map("accent_color")    // hex

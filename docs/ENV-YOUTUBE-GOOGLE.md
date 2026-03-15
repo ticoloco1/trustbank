@@ -1,5 +1,7 @@
 # Variáveis de ambiente — Google / YouTube (paywall + verificação de dono)
 
+**Não commitar:** use apenas na Vercel (Environment Variables) ou em `.env.local` local. O `.gitignore` evita que arquivos `.env` / `.env.local` sejam enviados ao GitHub. Ver passo a passo em **docs/CONFIGURAR-3-CHAVES-GOOGLE.md**.
+
 Para a verificação de dono do vídeo e as APIs de vídeo funcionarem, configure no `.env.local` e na Vercel:
 
 | Variável | Uso |

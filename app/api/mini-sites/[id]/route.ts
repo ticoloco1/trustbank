@@ -30,6 +30,7 @@ export async function PATCH(
     slug?: string;
     bio?: string;
     layout_columns?: number;
+    template?: string;
     theme?: string;
     primary_color?: string;
     accent_color?: string;
@@ -46,6 +47,7 @@ export async function PATCH(
   if (body.slug !== undefined) data.slug = body.slug;
   if (body.bio !== undefined) data.bio = body.bio;
   if (body.layout_columns !== undefined) data.layout_columns = body.layout_columns;
+  if (body.template !== undefined) data.template = body.template;
   if (body.theme !== undefined) data.theme = body.theme;
   if (body.primary_color !== undefined) data.primary_color = body.primary_color;
   if (body.accent_color !== undefined) data.accent_color = body.accent_color;
@@ -66,6 +68,7 @@ export async function PATCH(
     slug?: string;
     bio?: string;
     layout_columns?: number;
+    template?: string;
     theme?: string;
     primary_color?: string;
     accent_color?: string;

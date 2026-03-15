@@ -9,12 +9,15 @@ out
 build
 dist
 
-# Env (não subir secrets)
+# Env — NUNCA commitar (só configurar na Vercel ou .env.local local)
 .env
+.env.local
 .env*.local
+.env.development
 .env.development.local
 .env.test.local
 .env.production.local
+.env.vercel
 
 # Vercel
 .vercel
