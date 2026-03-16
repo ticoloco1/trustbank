@@ -23,30 +23,35 @@ function cacheKeyForPath(pathname: string): string {
 }
 
 export async function middleware(request: NextRequest) {
-  const ua = request.headers.get("user-agent") ?? "";
-  if (!BOT_UA.test(ua)) return NextResponse.next();
-
-  const pathname = request.nextUrl.pathname;
-  if (!shouldPrerenderCache(pathname)) return NextResponse.next();
-
-  const key = `prerender:${cacheKeyForPath(pathname)}`;
-
   try {
-    const { kv } = await import("@vercel/kv");
-    const html = await kv.get<string>(key);
-    if (html && typeof html === "string") {
-      return new NextResponse(html, {
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "public, max-age=3600, s-maxage=86400",
-        },
-      });
-    }
-  } catch {
-    // KV não configurado ou erro: deixa o request seguir (SSR normal)
-  }
+    const ua = request.headers.get("user-agent") ?? "";
+    if (!BOT_UA.test(ua)) return NextResponse.next();
 
-  return NextResponse.next();
+    const pathname = request.nextUrl.pathname;
+    if (!shouldPrerenderCache(pathname)) return NextResponse.next();
+
+    const key = `prerender:${cacheKeyForPath(pathname)}`;
+
+    try {
+      const { kv } = await import("@vercel/kv");
+      const html = await kv.get<string>(key);
+      if (html && typeof html === "string") {
+        return new NextResponse(html, {
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+          },
+        });
+      }
+    } catch {
+      // KV não configurado ou erro: deixa o request seguir (SSR normal)
+    }
+
+    return NextResponse.next();
+  } catch {
+    // Qualquer falha no middleware: não quebra o site, deixa a request seguir
+    return NextResponse.next();
+  }
 }
 
 export const config = {

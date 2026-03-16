@@ -1,9 +1,11 @@
 import Link from "next/link";
 import HomeSlugCheck from "./components/HomeSlugCheck";
+import HealthBanner from "./components/HealthBanner";
 
 export default function Home() {
   return (
     <main style={{ padding: "2rem 1rem", fontFamily: "system-ui", maxWidth: 720, margin: "0 auto" }}>
+      <HealthBanner />
       <h1 style={{ margin: "0 0 0.5rem", fontSize: "1.75rem" }}>TrustBank</h1>
       <p style={{ color: "#64748b", marginBottom: "1.5rem", fontSize: "0.95rem" }}>
         Compre domínios/slugs para sua página. Busque quantos quiser, adicione ao carrinho e pague de uma vez.

@@ -31,6 +31,8 @@ Se o GitHub pedir senha, use um **Personal Access Token** (GitHub → Settings �
 
 ---
 
+**Site não funciona no host (não entra, pesquisa, mini-site):** leia **docs/SITE-NAO-FUNCIONA-VERCEL.md** — checklist (DATABASE_URL, /api/health, build, domínio).
+
 **Inventário e checklist (últimos 5 dias):** leia **docs/TRABALHO-5-DIAS-INVENTARIO-E-CHECKLIST.md** — tudo que foi criado/alterado e o que conferir no deploy.
 
 **TrustBank 100% Prisma (só terminal, sem Supabase):** leia **docs/SO-TERMINAL-TRUSTBANK-PRISMA.md** — passo a passo só no terminal.
