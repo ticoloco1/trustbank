@@ -30,10 +30,11 @@ Quando **nada funciona** (não entra, pesquisa não responde, mini-site não abr
 
 ---
 
-## 4. Domínio
+## 4. Domínio (trustbank.xyz igual ao Lovable?)
 
-- Se você usa **trustbank.xyz**, no Vercel em **Settings → Domains** o domínio deve apontar para este projeto.
-- Caso contrário, você pode estar vendo outro deploy (outro projeto ou branch).
+- Se **trustbank.xyz** está igual ao **prime-fin-dash.lovable.app**, o domínio ainda está ligado ao **Lovable**, não ao Vercel. O código do GitHub (Vercel) não aparece.
+- Leia **docs/DOMINIO-VERCEL-NAO-LOVABLE.md**: como apontar trustbank.xyz para o **Vercel** em vez do Lovable.
+- No Vercel, **Settings → Domains**: adicione trustbank.xyz ao projeto certo. No registro do domínio (onde você comprou), use o CNAME/A que o Vercel indicar.
 
 ---
 
