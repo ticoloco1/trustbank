@@ -37,7 +37,17 @@ Quando **nada funciona** (não entra, pesquisa não responde, mini-site não abr
 
 ---
 
-## 5. Resumo rápido
+## 5. Tela em branco (nada carrega)
+
+- Abra o **DevTools** (F12) → aba **Console**. Se aparecer erro em vermelho, anote a mensagem.
+- Teste **diretamente** no navegador: `https://seu-dominio.vercel.app/api/health`  
+  - Se essa URL não abrir ou der erro, o problema é deploy ou projeto errado.
+- No Vercel, confirme que você está no **projeto certo** (o que está ligado ao repo **prime-fin-dash**). Se tiver mais de um projeto, o domínio pode estar apontando para outro.
+- **Deployments**: o último deploy está verde (Ready)? Se estiver vermelho (Failed), o build falhou — abra o log e corrija o erro.
+
+---
+
+## 6. Resumo rápido
 
 | Problema | O que fazer |
 |----------|-------------|
@@ -45,5 +55,6 @@ Quando **nada funciona** (não entra, pesquisa não responde, mini-site não abr
 | Pesquisa / slugs não respondem | Configurar `DATABASE_URL` e redeploy; ver `/api/health`. |
 | “Prisma not configured” na pesquisa | Mesmo: `DATABASE_URL` no Vercel + redeploy. |
 | Mini-site 404 | Slug existe no banco? Conferir tabela `mini_sites` e `DATABASE_URL`. |
+| Tela em branco | DevTools (F12) → Console para ver erro; testar /api/health; confirmar projeto e deploy no Vercel. |
 
 Depois de corrigir a `DATABASE_URL` e fazer redeploy, teste de novo a home, a pesquisa e um mini-site.
