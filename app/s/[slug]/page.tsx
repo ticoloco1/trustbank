@@ -11,18 +11,28 @@ import SafeImage from "./SafeImage";
 import MiniSiteVideosSection from "./MiniSiteVideosSection";
 import Link from "next/link";
 import type { Metadata } from "next";
+import type { Prisma } from "@prisma/client";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://trustbank.xyz";
+
+type SiteWithRelations = Prisma.MiniSiteGetPayload<{
+  include: {
+    ideas: true;
+    listed_domains: true;
+    mini_site_videos: { include: { video: { include: { quotation: true } } } };
+  };
+}>;
 
 type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const prisma = getPrisma();
-  if (!prisma) return { title: "TrustBank" };
+  try {
+    const { slug } = await params;
+    const prisma = getPrisma();
+    if (!prisma) return { title: `${slug} | TrustBank` };
 
-  const slugNorm = slug.replace(/^@/, "").toLowerCase();
-  const site = await prisma.miniSite.findFirst({
+    const slugNorm = slug.replace(/^@/, "").toLowerCase();
+    const site = await prisma.miniSite.findFirst({
     where: { OR: [{ slug }, { slug: slugNorm }, { slug: `@${slugNorm}` }] },
     select: {
       site_name: true,
@@ -86,16 +96,40 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: { canonical: url },
     robots: { index: true, follow: true },
   };
+  } catch {
+    const { slug } = await params;
+    return {
+      title: `${slug} | TrustBank`,
+      description: "Mini site no TrustBank.",
+      openGraph: { title: `${slug} | TrustBank`, url: `${BASE_URL}/s/${slug}` },
+    };
+  }
 }
 
 export default async function MiniSitePage({ params }: Props) {
-  const { slug } = await params;
-  const prisma = getPrisma();
-  if (!prisma) notFound();
+  let slug: string;
+  try {
+    const p = await params;
+    slug = p.slug;
+  } catch {
+    notFound();
+  }
 
-  // Encontrar por slug exato ou normalizado (trustbank.xyz/@ary e trustbank.xyz/s/ary)
-  const slugNorm = slug.replace(/^@/, "").toLowerCase();
-  const site = await prisma.miniSite.findFirst({
+  const prisma = getPrisma();
+  if (!prisma) {
+    return (
+      <main style={{ padding: "2rem", fontFamily: "system-ui", textAlign: "center", minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>trustbank.xyz/s/{slug}</h1>
+        <p style={{ color: "#64748b", marginBottom: "1rem" }}>Banco de dados não configurado. Configure DATABASE_URL na Vercel (Settings → Environment Variables).</p>
+        <Link href="/" style={{ color: "#0d9488", fontWeight: 600 }}>← Voltar à home</Link>
+      </main>
+    );
+  }
+
+  let site: SiteWithRelations | null;
+  try {
+    const slugNorm = slug.replace(/^@/, "").toLowerCase();
+    site = await prisma.miniSite.findFirst({
     where: { OR: [{ slug }, { slug: slugNorm }, { slug: `@${slugNorm}` }] },
     include: {
       ideas: { orderBy: { created_at: "desc" } },
@@ -106,6 +140,16 @@ export default async function MiniSitePage({ params }: Props) {
       },
     },
   });
+  } catch (err) {
+    console.error("[s/[slug]]", err);
+    return (
+      <main style={{ padding: "2rem", fontFamily: "system-ui", textAlign: "center", minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>Erro ao carregar trustbank.xyz/s/{slug}</h1>
+        <p style={{ color: "#64748b", marginBottom: "1rem" }}>Falha ao conectar ao banco. Verifique DATABASE_URL na Vercel e se as tabelas existem (npm run db:push ou migrations).</p>
+        <Link href="/" style={{ color: "#0d9488", fontWeight: 600 }}>← Voltar à home</Link>
+      </main>
+    );
+  }
 
   if (!site) {
     const slugNorm = slug.replace(/^@/, "") || slug;
