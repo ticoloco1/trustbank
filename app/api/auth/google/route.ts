@@ -7,7 +7,9 @@ import { getGoogleAuthUrl } from "@/lib/youtube";
  */
 export async function GET(request: NextRequest) {
   const redirectUri = request.nextUrl.origin + "/api/auth/google/callback";
-  const url = await getGoogleAuthUrl(redirectUri);
+  const returnTo = request.nextUrl.searchParams.get("returnTo")?.trim();
+  const state = returnTo && returnTo.startsWith("/") && !returnTo.includes("//") ? returnTo : undefined;
+  const url = await getGoogleAuthUrl(redirectUri, state);
   if (!url) {
     return NextResponse.json(
       { error: "Google OAuth não configurado. Defina GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET." },

@@ -4,7 +4,7 @@
  * Env: PLATFORM_WALLET (obrigatório); ETH_RPC_URL ou CHAIN_RPC_URL (Ethereum); POLYGON_RPC_URL (Polygon);
  * USDC_CONTRACT_ADDRESS ou USDC_ETH_CONTRACT; USDC_POLYGON_CONTRACT (opcionais).
  */
-import { createPublicClient, http, decodeEventLog, type Address } from "viem";
+import { createPublicClient, http, decodeEventLog, parseAbiItem, type Address } from "viem";
 import { mainnet, polygon } from "viem/chains";
 import { getPlatformWallet } from "./payment-config";
 
@@ -161,4 +161,57 @@ export async function verifyUsdcPayment(params: {
     success: false,
     error: "Transaction not found or no USDC transfer to platform wallet on Ethereum or Polygon",
   };
+}
+
+/** Blocos atrás para varrer depósitos (~7 dias Ethereum ~50k, Polygon ~400k) */
+const BLOCKS_LOOKBACK_ETH = 50_000;
+const BLOCKS_LOOKBACK_POLYGON = 400_000;
+
+export type DepositFound = { txHash: string; amount: string; chain: "ethereum" | "polygon" };
+
+/**
+ * Descobre transferências USDC para a carteira da plataforma a partir de um wallet (depósitos).
+ * Varre os blocos recentes em cada rede configurada.
+ */
+export async function findDepositsToPlatform(fromWallet: string): Promise<DepositFound[]> {
+  const platformWallet = getPlatformWallet() as Address;
+  if (!platformWallet?.startsWith("0x")) return [];
+
+  const configs = getChainConfigs(platformWallet);
+  const results: DepositFound[] = [];
+  const from = fromWallet.toLowerCase() as Address;
+  const to = platformWallet;
+
+  for (const cfg of configs) {
+    if (!cfg.usdcContract) continue;
+    try {
+      const client = createPublicClient({
+        chain: cfg.chain,
+        transport: http(cfg.rpcUrl),
+      });
+      const block = await client.getBlockNumber();
+      const fromBlock = block - BigInt(cfg.name === "polygon" ? BLOCKS_LOOKBACK_POLYGON : BLOCKS_LOOKBACK_ETH);
+      const logs = await client.getLogs({
+        address: cfg.usdcContract,
+        event: parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)"),
+        args: { from, to },
+        fromBlock: fromBlock < BigInt(0) ? BigInt(0) : fromBlock,
+        toBlock: "latest",
+      });
+      for (const log of logs) {
+        const value = (log.args as { value?: bigint }).value ?? BigInt(0);
+        const amountHuman = Number(value) / 10 ** USDC_DECIMALS;
+        if (amountHuman >= 0.01) {
+          results.push({
+            txHash: log.transactionHash,
+            amount: amountHuman.toFixed(USDC_DECIMALS),
+            chain: cfg.name,
+          });
+        }
+      }
+    } catch {
+      // skip chain on error
+    }
+  }
+  return results;
 }

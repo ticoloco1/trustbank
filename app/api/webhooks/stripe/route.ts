@@ -40,16 +40,54 @@ export async function POST(request: NextRequest) {
   }
 
   const session = event.data.object as Stripe.Checkout.Session;
-  const { type, reference_id, amount_usdc } = session.metadata || {};
+  const { type, reference_id, amount_usdc, cart: cartRaw } = session.metadata || {};
   const customerEmail = (session.customer_email || session.customer_details?.email || "").toLowerCase();
-  const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+  const stripeId = session.id;
+
+  if (type === "CART" && cartRaw) {
+    const existing = await prisma.payment.findFirst({
+      where: { stripe_payment_id: { startsWith: stripeId } },
+    });
+    if (existing) {
+      return NextResponse.json({ received: true, message: "Cart already processed" });
+    }
+    let cart: { type: string; reference_id: string; label?: string; amount_usdc: string }[];
+    try {
+      cart = JSON.parse(cartRaw) as typeof cart;
+      if (!Array.isArray(cart) || cart.length === 0) {
+        return NextResponse.json({ error: "Invalid cart" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid cart JSON" }, { status: 400 });
+    }
+    try {
+      for (let idx = 0; idx < cart.length; idx++) {
+        const item = cart[idx];
+        const itemStripeId = `${stripeId}_${idx}`;
+        await processOneStripePayment(prisma, {
+          type: item.type,
+          reference_id: item.reference_id,
+          amount_usdc: item.amount_usdc,
+          stripeId: itemStripeId,
+          customerEmail,
+        });
+      }
+      console.log("[webhooks/stripe] CART ok", stripeId, cart.length, "items");
+      return NextResponse.json({ received: true });
+    } catch (e) {
+      console.error("[webhooks/stripe] CART error", e);
+      return NextResponse.json(
+        { error: "server_error", message: e instanceof Error ? e.message : "Erro ao processar carrinho" },
+        { status: 500 }
+      );
+    }
+  }
 
   if (!type || !reference_id || !amount_usdc) {
     console.error("[webhooks/stripe] metadata incompleto:", session.metadata);
     return NextResponse.json({ error: "Invalid metadata" }, { status: 400 });
   }
 
-  const stripeId = session.id; // ou paymentIntentId para unicidade de pagamento
   const existing = await prisma.payment.findFirst({
     where: { stripe_payment_id: stripeId },
   });
@@ -58,14 +96,36 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (type === "VIDEO_UNLOCK") {
-      const viewerId = customerEmail ? `email:${customerEmail}` : `session:${session.id}`;
+    await processOneStripePayment(prisma, {
+      type,
+      reference_id,
+      amount_usdc,
+      stripeId,
+      customerEmail,
+    });
+    return NextResponse.json({ received: true });
+  } catch (e) {
+    console.error("[webhooks/stripe]", e);
+    return NextResponse.json(
+      { error: "server_error", message: e instanceof Error ? e.message : "Erro ao processar" },
+      { status: 500 }
+    );
+  }
+}
+
+async function processOneStripePayment(
+  prisma: Awaited<ReturnType<typeof getPrisma>>,
+  params: { type: string; reference_id: string; amount_usdc: string; stripeId: string; customerEmail: string }
+) {
+  const { type, reference_id, amount_usdc, stripeId, customerEmail } = params;
+  if (!prisma) throw new Error("Prisma not configured");
+
+  if (type === "VIDEO_UNLOCK") {
+      const viewerId = customerEmail ? `email:${customerEmail}` : `session:${stripeId}`;
       const existingUnlock = await prisma.videoUnlock.findUnique({
         where: { video_id_viewer_id: { video_id: reference_id, viewer_id: viewerId } },
       });
-      if (existingUnlock) {
-        return NextResponse.json({ received: true });
-      }
+      if (existingUnlock) return;
 
       const amountNum = parseFloat(amount_usdc);
       const { creator_usdc, platform_usdc } = splitVideoPaywall(amountNum);
@@ -108,9 +168,9 @@ export async function POST(request: NextRequest) {
       });
       if (!listing || listing.status !== "active") {
         console.error("[webhooks/stripe] listing not available", reference_id);
-        return NextResponse.json({ error: "Listing not available" }, { status: 400 });
+        throw new Error("Listing not available");
       }
-      const buyerId = customerEmail ? `email:${customerEmail}` : `session:${session.id}`;
+      const buyerId = customerEmail ? `email:${customerEmail}` : `session:${stripeId}`;
       const isAuctionEnded =
         listing.listing_type === "auction" && listing.end_at && new Date(listing.end_at) <= new Date();
       const priceNum =
@@ -169,7 +229,50 @@ export async function POST(request: NextRequest) {
         });
       });
       console.log("[webhooks/stripe] SLUG_PURCHASE ok", reference_id);
+    } else if (type === "SLUG_CLAIM") {
+      const slug = (reference_id as string).replace(/^\@/, "").toLowerCase();
+      if (!/^[a-z0-9_-]+$/i.test(slug)) {
+        console.error("[webhooks/stripe] invalid slug", reference_id);
+        throw new Error("Invalid slug");
+      }
+      const existingSite = await prisma.miniSite.findUnique({ where: { slug } });
+      const activeListing = await prisma.slugListing.findFirst({
+        where: { status: "active", OR: [{ slug_value: slug }, { slug_value: `@${slug}` }] },
+      });
+      if (existingSite || activeListing) {
+        console.error("[webhooks/stripe] slug no longer available", slug);
+        throw new Error("Slug no longer available");
+      }
+      const buyerId = customerEmail ? `email:${customerEmail}` : `session:${stripeId}`;
+      const nextRenewal = new Date();
+      nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.create({
+          data: {
+            type: "SLUG_CLAIM",
+            amount_usdc: amount_usdc,
+            payer_email: customerEmail || null,
+            payment_method: "card",
+            stripe_payment_id: stripeId,
+            reference_type: "slug_claim",
+            reference_id: slug,
+            status: "verified",
+            verified_at: new Date(),
+          },
+        });
+        await tx.miniSite.create({
+          data: {
+            user_id: buyerId,
+            slug,
+            site_name: slug.replace(/^@/, ""),
+            slug_annual_renewal_usdc: STANDALONE_SLUG_ANNUAL_USD,
+            next_slug_renewal_at: nextRenewal,
+          },
+        });
+      });
+      console.log("[webhooks/stripe] SLUG_CLAIM ok", slug);
     } else if (type === "MINISITE_SUBSCRIPTION") {
+      const { MINISITE_MONTHLY_USD } = await import("@/lib/payment-config");
       const nextBilling = new Date();
       nextBilling.setMonth(nextBilling.getMonth() + 1);
 
@@ -179,6 +282,7 @@ export async function POST(request: NextRequest) {
           select: { monthly_price_usdc: true },
         });
         if (!site) return;
+        const priceUsdc = site.monthly_price_usdc?.trim() || MINISITE_MONTHLY_USD;
         await tx.payment.create({
           data: {
             type: "MINISITE_SUBSCRIPTION",
@@ -197,7 +301,7 @@ export async function POST(request: NextRequest) {
           where: { id: reference_id },
           data: {
             subscription_plan: "monthly",
-            monthly_price_usdc: site.monthly_price_usdc,
+            monthly_price_usdc: priceUsdc,
             next_billing_at: nextBilling,
             updated_at: new Date(),
           },
@@ -219,13 +323,4 @@ export async function POST(request: NextRequest) {
       });
       console.log("[webhooks/stripe] OTHER ok");
     }
-
-    return NextResponse.json({ received: true });
-  } catch (e) {
-    console.error("[webhooks/stripe]", e);
-    return NextResponse.json(
-      { error: "server_error", message: e instanceof Error ? e.message : "Erro ao processar" },
-      { status: 500 }
-    );
-  }
 }

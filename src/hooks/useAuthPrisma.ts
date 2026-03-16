@@ -7,7 +7,10 @@ import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 
 const USE_PRISMA =
-  typeof window !== "undefined" && (process.env.NEXT_PUBLIC_USE_PRISMA === "true" || process.env.NEXT_PUBLIC_SITE === "trustbank");
+  typeof window !== "undefined" &&
+  (process.env.NEXT_PUBLIC_USE_PRISMA === "true" ||
+    process.env.NEXT_PUBLIC_SITE === "trustbank" ||
+    !process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 export type AuthUser = { id: string; email?: string | null };
 

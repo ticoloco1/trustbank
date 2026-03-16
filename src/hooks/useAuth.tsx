@@ -4,8 +4,12 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { useAccount } from "wagmi";
 import { useAuthPrisma } from "@/hooks/useAuthPrisma";
 
+// TrustBank / royal-fintech: auth por carteira (Prisma). Use Prisma se explicitamente ativado, ou se for site trustbank, ou se Supabase não estiver configurado.
 const USE_PRISMA =
-  typeof window !== "undefined" && (process.env.NEXT_PUBLIC_USE_PRISMA === "true" || process.env.NEXT_PUBLIC_SITE === "trustbank");
+  typeof window !== "undefined" &&
+  (process.env.NEXT_PUBLIC_USE_PRISMA === "true" ||
+    process.env.NEXT_PUBLIC_SITE === "trustbank" ||
+    !process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 export type User = { id: string; email?: string | null };
 

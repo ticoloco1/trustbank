@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useState } from "react";
 import { ProtectedPlayer } from "@/components/ProtectedPlayer";
+import { useCart } from "@/context/CartContext";
 
 type VideoPayload = {
   id: string;
@@ -26,6 +27,7 @@ export default function VideoPage() {
   const { disconnect } = useDisconnect();
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState("");
+  const { addItem, hasItem } = useCart();
 
   const { data: googleSession } = useQuery({
     queryKey: ["google-session"],
@@ -277,6 +279,7 @@ export default function VideoPage() {
                       style={{
                         padding: "0.6rem 1.2rem",
                         marginBottom: "0.75rem",
+                        marginRight: "0.5rem",
                         background: "#635bff",
                         color: "#fff",
                         border: 0,
@@ -288,6 +291,31 @@ export default function VideoPage() {
                     >
                       {checkoutCardMutation.isPending ? "Abrindo…" : "Pagar com cartão (repasse em USDC)"}
                     </button>
+                    {!hasItem("VIDEO_UNLOCK", video.id) && (
+                      <button
+                        type="button"
+                        onClick={() => addItem({
+                          type: "VIDEO_UNLOCK",
+                          reference_id: video.id,
+                          label: `Video: ${video.title || video.id}`,
+                          amount_usdc: video.paywall_price_usdc ?? "0",
+                        })}
+                        style={{
+                          padding: "0.6rem 1.2rem",
+                          marginBottom: "0.75rem",
+                          background: "#334155",
+                          color: "#fff",
+                          border: 0,
+                          borderRadius: 8,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          fontSize: "0.95rem",
+                        }}
+                      >
+                        Add to cart
+                      </button>
+                    )}
+                    <Link href="/cart" style={{ fontSize: "0.9rem", marginLeft: "0.5rem", color: "#93c5fd" }}>View cart</Link>
                     {viewerEmail && (
                       <p style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: "0.5rem" }}>
                         Será cobrado no e-mail: {viewerEmail}

@@ -110,6 +110,62 @@ function DashboardContent() {
     enabled: !!address && !!isAdmin,
   });
 
+  const { data: slugSettings } = useQuery({
+    queryKey: ["admin-slug-settings", address, isAdmin],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/slug-settings?wallet=${encodeURIComponent(address ?? "")}`);
+      if (!r.ok) throw new Error("Forbidden");
+      return r.json() as Promise<{
+        slug_claim_default_usd: string;
+        slug_claim_premium_usd: string;
+        slug_claim_letter_usd: string;
+        slug_allowed_override: string[];
+      }>;
+    },
+    enabled: !!address && !!isAdmin,
+  });
+
+  const [slugSettingsForm, setSlugSettingsForm] = useState({
+    slug_claim_default_usd: "12.90",
+    slug_claim_premium_usd: "99.00",
+    slug_claim_letter_usd: "299.00",
+    slug_allowed_override: "",
+  });
+
+  useEffect(() => {
+    if (slugSettings) {
+      setSlugSettingsForm({
+        slug_claim_default_usd: slugSettings.slug_claim_default_usd ?? "12.90",
+        slug_claim_premium_usd: slugSettings.slug_claim_premium_usd ?? "99.00",
+        slug_claim_letter_usd: slugSettings.slug_claim_letter_usd ?? "299.00",
+        slug_allowed_override: Array.isArray(slugSettings.slug_allowed_override) ? slugSettings.slug_allowed_override.join("\n") : "",
+      });
+    }
+  }, [slugSettings]);
+
+  const saveSlugSettingsMutation = useMutation({
+    mutationFn: async (payload: typeof slugSettingsForm) => {
+      const r = await fetch("/api/admin/slug-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          admin_wallet: address,
+          slug_claim_default_usd: payload.slug_claim_default_usd.trim() || undefined,
+          slug_claim_premium_usd: payload.slug_claim_premium_usd.trim() || undefined,
+          slug_claim_letter_usd: payload.slug_claim_letter_usd.trim() || undefined,
+          slug_allowed_override: payload.slug_allowed_override
+            .split(/[\n,]+/)
+            .map((s) => s.trim().toLowerCase().replace(/^@/, ""))
+            .filter(Boolean),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Falha ao salvar");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-slug-settings"] }),
+  });
+
   const saveApiKeysMutation = useMutation({
     mutationFn: async (payload: { google_client_id?: string; google_client_secret?: string; youtube_api_key?: string }) => {
       const body: { admin_wallet: string; google_client_id?: string; google_client_secret?: string; youtube_api_key?: string } = {
@@ -169,13 +225,21 @@ function DashboardContent() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const slugFromUrl = searchParams.get("slug")?.trim();
+    if (slugFromUrl) {
+      setForm((f) => ({ ...f, slug: slugFromUrl, site_name: f.site_name || slugFromUrl.replace(/^@/, "") }));
+    }
+  }, [searchParams]);
+
   const createMutation = useMutation({
     mutationFn: async (payload: typeof form) => {
       const r = await fetch("/api/mini-sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: user?.id ?? "anonymous",
+          user_id: address?.toLowerCase() ?? user?.email ?? user?.id ?? "anonymous",
+          ...(isAdmin && address ? { admin_wallet: address.toLowerCase() } : {}),
           site_name: payload.site_name || null,
           slug: payload.slug || null,
           bio: payload.bio || null,
@@ -189,8 +253,9 @@ function DashboardContent() {
           cotacao_label: payload.cotacao_label || null,
         }),
       });
-      if (!r.ok) throw new Error("Falha ao criar");
-      return r.json();
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((data as { message?: string }).message || data.error || "Falha ao criar");
+      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mini-sites"] });
@@ -222,12 +287,31 @@ function DashboardContent() {
     },
   });
 
-  if (loading) return <p style={{ padding: "2rem" }}>Loading…</p>;
+  if (loading) return <p style={{ padding: "2rem" }}>Verificando acesso…</p>;
   if (!user && !isAdmin) {
     return (
-      <main style={{ padding: "2rem", fontFamily: "system-ui" }}>
-        <p>Connect your wallet (admin) to access the dashboard.</p>
-        <Link href="/" style={{ color: "#0066cc" }}>← Back</Link>
+      <main style={{ padding: "2rem", fontFamily: "system-ui", maxWidth: 560, margin: "0 auto" }}>
+        <h1 style={{ fontSize: "1.25rem", marginBottom: "1rem" }}>Acesso ao Dashboard</h1>
+        {address ? (
+          <>
+            <p style={{ color: "#b91c1c", marginBottom: "1rem" }}>
+              Esta carteira não está como admin: <code style={{ fontSize: "0.85em", background: "#fef2f2", padding: "0.2em 0.4em", borderRadius: 4 }}>{address.slice(0, 10)}…{address.slice(-8)}</code>
+            </p>
+            <p style={{ marginBottom: "0.75rem" }}>Para entrar como admin, use uma destas opções:</p>
+            <ol style={{ marginLeft: "1.25rem", marginBottom: "1rem", lineHeight: 1.7 }}>
+              <li><strong>Variável de ambiente (mais rápido):</strong> no Vercel (ou no seu servidor), adicione <code style={{ background: "#f1f5f9", padding: "0.15em 0.35em", borderRadius: 4 }}>ADMIN_WALLET={address.toLowerCase()}</code> nas variáveis de ambiente (server). Depois faça redeploy.</li>
+              <li><strong>Banco de dados:</strong> insira este endereço na tabela <code style={{ background: "#f1f5f9", padding: "0.15em 0.35em", borderRadius: 4 }}>admin_wallet_addresses</code> (campo <code>wallet_address</code>), por exemplo via Prisma Studio ou SQL.</li>
+            </ol>
+            <p style={{ fontSize: "0.9rem", color: "#64748b" }}>O login de admin no TrustBank é só por carteira. Email é usado apenas para Google (vídeos/paywall), não para acessar o painel.</p>
+          </>
+        ) : (
+          <p>Conecte sua carteira (MetaMask ou outra) para acessar o dashboard. O admin é identificado pela carteira, não por email.</p>
+        )}
+        <p style={{ marginTop: "1.5rem" }}>
+          <Link href="/" style={{ color: "#0066cc", textDecoration: "none" }}>← Voltar à home</Link>
+          {" · "}
+          <Link href="/auth" style={{ color: "#0066cc", textDecoration: "none" }}>Entrar com Google</Link>
+        </p>
       </main>
     );
   }
@@ -237,14 +321,26 @@ function DashboardContent() {
       <div style={{ marginBottom: "1.5rem" }}>
         <Link href="/" style={{ color: "#666", textDecoration: "none" }}>← Home</Link>
       </div>
-      <h1>Dashboard — Mini sites</h1>
+      <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        Dashboard — Mini sites
+        {isAdmin && <span style={{ fontSize: "0.65rem", fontWeight: 600, background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.5rem", borderRadius: 4 }}>ADMIN</span>}
+      </h1>
       <p style={{ color: "#555", marginBottom: "1.5rem" }}>
-        Create and edit mini sites. Use <strong>slug</strong> for the URL: /s/<strong>slug</strong>.
-        <Link href="/market" style={{ marginLeft: "0.5rem", color: "#0066cc" }}>Slug marketplace →</Link>
+        Create and edit mini sites. Use <strong>slug</strong> for the URL: /s/<strong>slug</strong>. Slugs comuns são <strong>grátis</strong> em <Link href="/slugs" style={{ color: "#0066cc" }}>/slugs</Link>.
+        <Link href="/market" style={{ marginLeft: "0.5rem", color: "#0066cc" }}>Marketplace →</Link>
+        <Link href="/cart" style={{ marginLeft: "0.5rem", color: "#0066cc" }}>Carrinho →</Link>
+        {isAdmin && (
+          <span style={{ display: "block", marginTop: "0.5rem", fontSize: "0.9rem", color: "#15803d" }}>
+            Admin: all tools enabled — create slugs without payment, API keys, list company/@handle.
+          </span>
+        )}
       </p>
 
       <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f6f6f6", borderRadius: 8 }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Create mini site</h2>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>
+          Create mini site
+          {isAdmin && <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "#15803d", marginLeft: "0.5rem" }}>(admin: slug without payment)</span>}
+        </h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -502,6 +598,71 @@ function DashboardContent() {
         </section>
       )}
 
+      {isAdmin && address && (
+        <section style={{ marginBottom: "2rem", padding: "1rem", background: "#eff6ff", borderRadius: 8, border: "1px solid #93c5fd" }}>
+          <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Preços e slugs @ liberados (admin)</h2>
+          <p style={{ fontSize: "0.9rem", color: "#1e40af", marginBottom: "1rem" }}>
+            Altere os preços de claim de slug. Lista &quot;Slugs liberados&quot;: um por linha (ex.: bank, ceo) — esses @ ficam disponíveis para registro mesmo na lista bloqueada.
+          </p>
+          <form
+            onSubmit={(e) => { e.preventDefault(); saveSlugSettingsMutation.mutate(slugSettingsForm); }}
+            style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 420 }}
+          >
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>Preço padrão (US$)</label>
+                <input
+                  type="text"
+                  value={slugSettingsForm.slug_claim_default_usd}
+                  onChange={(e) => setSlugSettingsForm((f) => ({ ...f, slug_claim_default_usd: e.target.value }))}
+                  placeholder="12.90"
+                  style={{ width: "6rem", padding: "0.5rem" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>Preço premium (US$)</label>
+                <input
+                  type="text"
+                  value={slugSettingsForm.slug_claim_premium_usd}
+                  onChange={(e) => setSlugSettingsForm((f) => ({ ...f, slug_claim_premium_usd: e.target.value }))}
+                  placeholder="99.00"
+                  style={{ width: "6rem", padding: "0.5rem" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>Preço letra (US$)</label>
+                <input
+                  type="text"
+                  value={slugSettingsForm.slug_claim_letter_usd}
+                  onChange={(e) => setSlugSettingsForm((f) => ({ ...f, slug_claim_letter_usd: e.target.value }))}
+                  placeholder="299.00"
+                  style={{ width: "6rem", padding: "0.5rem" }}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", fontWeight: 600 }}>Slugs @ liberados (um por linha)</label>
+              <textarea
+                value={slugSettingsForm.slug_allowed_override}
+                onChange={(e) => setSlugSettingsForm((f) => ({ ...f, slug_allowed_override: e.target.value }))}
+                placeholder="bank&#10;ceo&#10;seo"
+                rows={3}
+                style={{ width: "100%", padding: "0.5rem", fontFamily: "monospace", fontSize: "0.9rem" }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={saveSlugSettingsMutation.isPending}
+              style={{ padding: "0.5rem 1rem", background: "#2563eb", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}
+            >
+              {saveSlugSettingsMutation.isPending ? "Salvando…" : "Salvar preços e liberados"}
+            </button>
+            {saveSlugSettingsMutation.isSuccess && <p style={{ color: "#15803d", fontSize: "0.9rem" }}>Atualizado.</p>}
+            {saveSlugSettingsMutation.isError && <p style={{ color: "#b91c1c", fontSize: "0.9rem" }}>{(saveSlugSettingsMutation.error as Error).message}</p>}
+          </form>
+        </section>
+      )}
+
       <section style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Mini sites</h2>
         {isLoading ? (
@@ -528,24 +689,39 @@ function DashboardContent() {
                 <div>
                   <strong>{s.site_name || s.slug || s.id.slice(0, 8)}</strong>
                   {s.slug && (
-                    <span style={{ marginLeft: "0.5rem", color: "#666" }}>/s/{s.slug}</span>
+                    <span style={{ marginLeft: "0.5rem", color: "#666" }}>
+                      /s/{s.slug}
+                      {s.slug.startsWith("@") && <span style={{ marginLeft: "0.25rem", fontSize: "0.85rem", color: "#1e3a8a", fontWeight: 600 }}>(ou /{s.slug})</span>}
+                    </span>
                   )}
                   {s._count && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#888" }}>({s._count.ideas} ideas)</span>}
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   {s.slug && (
                     <Link
                       href={`/s/${s.slug}`}
                       style={{ padding: "0.25rem 0.5rem", background: "#eee", borderRadius: 4, textDecoration: "none", color: "#333", fontSize: "0.9rem" }}
                     >
-                      View
+                      Ver
                     </Link>
                   )}
+                  <Link
+                    href={`/dashboard/${s.id}#marketplace`}
+                    style={{ padding: "0.25rem 0.5rem", background: "#0d9488", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
+                  >
+                    Vender
+                  </Link>
+                  <Link
+                    href={`/dashboard/${s.id}#marketplace`}
+                    style={{ padding: "0.25rem 0.5rem", background: "#7c3aed", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
+                  >
+                    Leilão
+                  </Link>
                   <Link
                     href={`/dashboard/${s.id}`}
                     style={{ padding: "0.25rem 0.5rem", background: "#333", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.9rem" }}
                   >
-                    Edit
+                    Editar
                   </Link>
                 </div>
               </li>
@@ -556,8 +732,8 @@ function DashboardContent() {
 
       <section style={{ padding: "1rem", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Vídeos e paywall (YouTube)</h2>
-        <p style={{ fontSize: "0.9rem", color: "#0c4a6e", fontWeight: 600, marginBottom: "0.5rem" }}>
-          Paywall é exclusivo: use apenas o login com Google abaixo. Não há outra forma de ativar paywall.
+        <p style={{ fontSize: "0.9rem", color: "#0c4a6e", marginBottom: "0.5rem" }}>
+          <strong>Opcional:</strong> entre com Google <strong>só se</strong> for gerenciar vídeos do YouTube e ativar paywall. Você já está logado com a carteira; não é obrigatório usar email/Google.
         </p>
         {googleError && (
           <p style={{ padding: "0.5rem", marginBottom: "0.75rem", background: "#fef2f2", color: "#b91c1c", borderRadius: 4, fontSize: "0.9rem" }}>
@@ -671,11 +847,28 @@ function DashboardContent() {
                         {v.paywall_enabled ? `Paywall: ${v.paywall_price_usdc ?? "0"} USDC` : "Sem paywall"}
                       </p>
                       <Link
-                        href={`/v/${v.youtube_id}`}
+                        href={`/v/${v.id}`}
                         style={{ marginTop: "0.5rem", display: "inline-block", fontSize: "0.85rem", color: "#1a73e8" }}
                       >
                         Ver página do vídeo →
                       </Link>
+                      <p style={{ marginTop: "0.5rem", fontSize: "0.8rem", color: "#0c4a6e", fontWeight: 600 }}>Backlink para o canal</p>
+                      <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#555" }}>Coloque este link na descrição do vídeo no YouTube:</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.35rem", flexWrap: "wrap" }}>
+                        <code style={{ fontSize: "0.8rem", background: "#f1f5f9", padding: "0.25rem 0.5rem", borderRadius: 4, wordBreak: "break-all" }}>
+                          {typeof window !== "undefined" ? `${window.location.origin}/v/${v.id}` : `/v/${v.id}`}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const origin = typeof window !== "undefined" ? window.location.origin : "";
+                            navigator.clipboard?.writeText(`${origin}/v/${v.id}`).then(() => alert("Link copiado!")).catch(() => {});
+                          }}
+                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", background: "#0c4a6e", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}
+                        >
+                          Copiar
+                        </button>
+                      </div>
                     </div>
                   </li>
                 ))}

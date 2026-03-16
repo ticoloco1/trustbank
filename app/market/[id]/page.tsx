@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useState } from "react";
+import { useCart } from "@/context/CartContext";
 
 type Listing = {
   id: string;
@@ -33,6 +34,7 @@ export default function MarketListingPage() {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState("");
   const [bidAmount, setBidAmount] = useState("");
+  const { addItem, hasItem } = useCart();
 
   const { data: listing, isLoading, isError } = useQuery({
     queryKey: ["slug-listing", id],
@@ -358,6 +360,28 @@ export default function MarketListingPage() {
                 >
                   {checkoutCardMutation.isPending ? "Redirecting…" : "Pay with card"}
                 </button>
+                {!hasItem("SLUG_PURCHASE", id) && (
+                  <button
+                    type="button"
+                    onClick={() => addItem({
+                      type: "SLUG_PURCHASE",
+                      reference_id: id,
+                      label: `Slug: ${listing.display_slug}`,
+                      amount_usdc: paymentConfig.amount_usdc,
+                    })}
+                    style={{
+                      padding: "0.5rem 1rem",
+                      background: "#334155",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Add to cart
+                  </button>
+                )}
+                <Link href="/cart" style={{ fontSize: "0.9rem", color: "#7dd3fc", alignSelf: "center" }}>View cart</Link>
               </div>
             </>
           )}

@@ -10,19 +10,22 @@ const COOKIE_MAX_AGE = 60 * 60; // 1 hora
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
+  const state = request.nextUrl.searchParams.get("state");
   const redirectUri = request.nextUrl.origin + "/api/auth/google/callback";
   const dashboardUrl = request.nextUrl.origin + "/dashboard";
+  const returnPath = state && state.startsWith("/") && !state.includes("//") ? state : null;
+  const successUrl = returnPath ? request.nextUrl.origin + returnPath : dashboardUrl;
 
   if (!code) {
-    return NextResponse.redirect(dashboardUrl + "?google_error=missing_code");
+    return NextResponse.redirect((returnPath ? successUrl : dashboardUrl) + "?google_error=missing_code");
   }
 
   const tokens = await exchangeCodeForTokens(code, redirectUri);
   if (!tokens) {
-    return NextResponse.redirect(dashboardUrl + "?google_error=exchange_failed");
+    return NextResponse.redirect((returnPath ? successUrl : dashboardUrl) + "?google_error=exchange_failed");
   }
 
-  const res = NextResponse.redirect(dashboardUrl);
+  const res = NextResponse.redirect(successUrl);
   res.cookies.set(COOKIE_NAME, tokens.access_token, {
     path: "/",
     httpOnly: true,

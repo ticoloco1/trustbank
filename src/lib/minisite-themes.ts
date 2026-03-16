@@ -23,4 +23,9 @@ export const MINISITE_THEMES: MinisiteThemePreset[] = [
   { id: "indigo", name: "Indigo", primary_color: "#4f46e5", accent_color: "#6366f1", bg_color: "#eef2ff" },
   { id: "cinza_escuro", name: "Cinza escuro", primary_color: "#f9fafb", accent_color: "#d1d5db", bg_color: "#111827" },
   { id: "coral", name: "Coral", primary_color: "#ea580c", accent_color: "#f97316", bg_color: "#fff7ed" },
+  // Premium estilo banco / fintech
+  { id: "banco", name: "Banco (premium)", primary_color: "#0f172a", accent_color: "#c9a227", bg_color: "#f8fafc" },
+  { id: "fintech", name: "Fintech (verde + dourado)", primary_color: "#0d9488", accent_color: "#c9a227", bg_color: "#f0fdfa" },
+  { id: "luxury", name: "Luxo (premium dark)", primary_color: "#0a0a0a", accent_color: "#d4af37", bg_color: "#0a0a0a" },
+  { id: "fintech_modern", name: "Fintech moderno", primary_color: "#0d9488", accent_color: "#06b6d4", bg_color: "#f0fdfa" },
 ];

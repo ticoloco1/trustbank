@@ -4,11 +4,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAccount } from "wagmi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { MINISITE_THEMES } from "@/lib/minisite-themes";
+import { useCart } from "@/context/CartContext";
+import { BACKGROUND_OPTIONS, articleBackgroundStyles, getArticleBackgroundClass } from "@/lib/article-page";
 
-type Idea = { id: string; title: string | null; content: string | null };
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), { ssr: false });
+import ImageUpload from "@/components/ImageUpload";
+import SectionOrderSortable from "@/components/SectionOrderSortable";
+
+type Idea = { id: string; title: string | null; content: string | null; image_url: string | null };
+type GalleryItem = { url: string; caption?: string };
+type ListedDomain = { id: string; name: string; slug: string; price: string | null; description: string | null; link: string | null; status: string };
 type MiniSite = {
   id: string;
   site_name: string | null;
@@ -22,10 +31,19 @@ type MiniSite = {
   bg_color: string | null;
   cotacao_symbol: string | null;
   cotacao_label: string | null;
+  ticker_bar_color?: string | null;
+  content_order?: string | null;
+  banner_url?: string | null;
+  feed_image_1?: string | null;
+  feed_image_2?: string | null;
+  feed_image_3?: string | null;
+  feed_image_4?: string | null;
+  gallery_images?: GalleryItem[] | null;
   subscription_plan: string | null;
   monthly_price_usdc: string | null;
   next_billing_at: string | null;
   ideas: Idea[];
+  mini_site_videos?: { video: { id: string; youtube_id: string; title: string | null; thumbnail_url: string | null; quotation?: { total_shares: number; valuation_usdc: string | null; ticker_symbol: string | null; revenue_usdc: string | null } | null } }[];
 };
 
 export default function EditMiniSitePage() {
@@ -35,13 +53,14 @@ export default function EditMiniSitePage() {
   const { user, isAdmin, loading } = useAuth();
   const { address } = useAccount();
   const qc = useQueryClient();
-  const [ideaForm, setIdeaForm] = useState({ title: "", content: "" });
+  const [ideaForm, setIdeaForm] = useState({ title: "", content: "", image_url: "" });
   const [listingForm, setListingForm] = useState({
     price_usdc: "",
     listing_type: "sale" as "sale" | "auction",
     end_at: "",
     min_bid_usdc: "1",
   });
+  const { addItem, hasItem } = useCart();
 
   const { data: site, isLoading } = useQuery({
     queryKey: ["mini-site", id],
@@ -62,6 +81,171 @@ export default function EditMiniSitePage() {
     },
   });
   const myListing = slugListings.find((l: { mini_site?: { id: string } }) => l.mini_site?.id === id) ?? null;
+
+  const { data: extraPages = [], refetch: refetchPages } = useQuery({
+    queryKey: ["mini-site-pages", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/mini-sites/${id}/pages`);
+      if (!r.ok) return [];
+      return r.json() as Promise<{ id: string; title: string; page_slug: string; content_html: string | null; background: string | null }[]>;
+    },
+    enabled: !!id,
+  });
+
+  const { data: listedDomains = [], refetch: refetchDomains } = useQuery({
+    queryKey: ["mini-site-domains", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/mini-sites/${id}/domains`);
+      if (!r.ok) return [];
+      return r.json() as Promise<ListedDomain[]>;
+    },
+    enabled: !!id,
+  });
+
+  const [pageForm, setPageForm] = useState({ title: "", page_slug: "", content_html: "", background: "white-lines" as string });
+  const [editingPageId, setEditingPageId] = useState<string | null>(null);
+
+  const createPageMutation = useMutation({
+    mutationFn: async (payload: { title: string; page_slug: string; content_html: string; background: string }) => {
+      const r = await fetch(`/api/mini-sites/${id}/pages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || "Failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      refetchPages();
+      setPageForm({ title: "", page_slug: "", content_html: "", background: "white-lines" });
+    },
+  });
+
+  const updatePageMutation = useMutation({
+    mutationFn: async ({ pageId, payload }: { pageId: string; payload: { title?: string; page_slug?: string; content_html?: string; background?: string } }) => {
+      const r = await fetch(`/api/mini-sites/${id}/pages/${pageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      refetchPages();
+      setEditingPageId(null);
+    },
+  });
+
+  const deletePageMutation = useMutation({
+    mutationFn: async (pageId: string) => {
+      const r = await fetch(`/api/mini-sites/${id}/pages/${pageId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => refetchPages(),
+  });
+
+  const [domainForm, setDomainForm] = useState({ name: "", price: "", description: "", link: "" });
+  const [editingDomainId, setEditingDomainId] = useState<string | null>(null);
+
+  const createDomainMutation = useMutation({
+    mutationFn: async (payload: { name: string; price?: string; description?: string; link?: string }) => {
+      const r = await fetch(`/api/mini-sites/${id}/domains`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || "Failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      refetchDomains();
+      setDomainForm({ name: "", price: "", description: "", link: "" });
+    },
+  });
+
+  const updateDomainMutation = useMutation({
+    mutationFn: async ({ domainId, payload }: { domainId: string; payload: Partial<{ name: string; price: string; description: string; link: string; status: string }> }) => {
+      const r = await fetch(`/api/mini-sites/${id}/domains/${domainId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      refetchDomains();
+      setEditingDomainId(null);
+    },
+  });
+
+  const deleteDomainMutation = useMutation({
+    mutationFn: async (domainId: string) => {
+      const r = await fetch(`/api/mini-sites/${id}/domains/${domainId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => refetchDomains(),
+  });
+
+  const [videoIdToAdd, setVideoIdToAdd] = useState("");
+  const [editingQuotationVideoId, setEditingQuotationVideoId] = useState<string | null>(null);
+  const [quotationForm, setQuotationForm] = useState({ total_shares: 1000000, system_percent: 20, sellable_percent: 70, valuation_usdc: "", ticker_symbol: "", revenue_usdc: "" });
+  const addVideoMutation = useMutation({
+    mutationFn: async (vid: string) => {
+      const r = await fetch(`/api/mini-sites/${id}/videos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: vid }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Falha ao adicionar");
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mini-site", id] });
+      setVideoIdToAdd("");
+    },
+  });
+  const removeVideoMutation = useMutation({
+    mutationFn: async (videoId: string) => {
+      const r = await fetch(`/api/mini-sites/${id}/videos/${videoId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("Falha ao remover");
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["mini-site", id] }),
+  });
+  const updateQuotationMutation = useMutation({
+    mutationFn: async ({ videoId, payload }: { videoId: string; payload: { admin_wallet?: string; total_shares?: number; system_percent?: number; sellable_percent?: number; valuation_usdc?: string; ticker_symbol?: string; revenue_usdc?: string } }) => {
+      const r = await fetch(`/api/videos/${videoId}/quotation`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error("Falha ao salvar cotação");
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mini-site", id] });
+      setEditingQuotationVideoId(null);
+    },
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["analytics", id],
+    queryFn: async () => {
+      const r = await fetch(`/api/analytics?mini_site_id=${encodeURIComponent(id)}`);
+      if (!r.ok) return null;
+      return r.json() as Promise<{
+        total_views: number;
+        unique_visitors: number;
+        by_path: { path: string; views: number; uniques: number }[];
+        by_day: { date: string; views: number; uniques: number }[];
+        by_referrer?: { source: string; views: number }[];
+        recent_clicks?: { path: string; label: string | null; at: string }[];
+      }>;
+    },
+    enabled: !!id,
+  });
 
   const listSlugMutation = useMutation({
     mutationFn: async () => {
@@ -87,7 +271,26 @@ export default function EditMiniSitePage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: Partial<MiniSite>) => {
+    mutationFn: async (formPayload: Partial<MiniSite>) => {
+      // Refetch deste mini site para nunca enviar dados de outro (evita foto de um site apagar no outro)
+      const getRes = await fetch(`/api/mini-sites/${id}`);
+      if (!getRes.ok) throw new Error("Falha ao carregar dados atuais");
+      const latest = (await getRes.json()) as MiniSite;
+      if (latest.id !== id) throw new Error("Mini site não corresponde");
+      // Só usa formPayload se for do site atual; senão envia só o latest (seguro)
+      const fromForm = formPayload.id === id ? formPayload : {};
+      const payload: Record<string, unknown> = {
+        ...latest,
+        ...fromForm,
+        id: latest.id,
+      };
+      delete payload.ideas;
+      delete payload.slug_listings;
+      delete payload.payments;
+      delete payload.analytics_events;
+      delete payload.extra_pages;
+      delete payload.listed_domains;
+      delete payload.mini_site_videos;
       const r = await fetch(`/api/mini-sites/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -100,7 +303,7 @@ export default function EditMiniSitePage() {
   });
 
   const addIdeaMutation = useMutation({
-    mutationFn: async (payload: { title: string; content: string }) => {
+    mutationFn: async (payload: { title: string; content: string; image_url?: string }) => {
       const r = await fetch("/api/ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -111,7 +314,7 @@ export default function EditMiniSitePage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mini-site", id] });
-      setIdeaForm({ title: "", content: "" });
+      setIdeaForm({ title: "", content: "", image_url: "" });
     },
   });
 
@@ -132,43 +335,72 @@ export default function EditMiniSitePage() {
     );
   }
 
-  if (isLoading || !site) {
+  // Só mostra o form quando temos dados do mini site correto (evita usar dados de outro site)
+  if (isLoading || !site || site.id !== id) {
     return (
       <main style={{ padding: "2rem" }}>
-        <p>Mini site not found or loading…</p>
+        <p>{!site ? "Mini site not found or loading…" : "Loading this mini site…"}</p>
         <Link href="/dashboard">← Dashboard</Link>
       </main>
     );
   }
 
-  const [edit, setEdit] = useState(site);
+  const [edit, setEdit] = useState<MiniSite | null>(null);
+  const prevIdRef = useRef<string | null>(null);
+
+  // Ao trocar de mini site (id), limpa edit para nunca usar dados do site anterior
+  useEffect(() => {
+    prevIdRef.current = null;
+    setEdit(null);
+  }, [id]);
+
+  // Sincroniza edit só quando o site carregado for realmente deste id
+  useEffect(() => {
+    if (!site || site.id !== id) return;
+    if (prevIdRef.current !== id) {
+      prevIdRef.current = id;
+      setEdit({ ...site });
+    }
+  }, [id, site]);
+
+  // Só usar edit se for do site atual; senão usar site (evita mostrar/enviar dados de outro mini site)
+  const formData = (edit && edit.id === id ? edit : site) as MiniSite;
+
+  const mergeEdit = (prev: MiniSite | null, patch: Partial<MiniSite>): MiniSite => {
+    const base = (prev && prev.id === id) ? prev : site;
+    return { ...base, ...patch } as MiniSite;
+  };
 
   return (
     <main style={{ padding: "2rem", fontFamily: "system-ui", maxWidth: 720, margin: "0 auto" }}>
       <div style={{ marginBottom: "1rem" }}>
         <Link href="/dashboard" style={{ color: "#666", textDecoration: "none" }}>← Mini sites</Link>
       </div>
-      <h1>Edit: {site.site_name || site.slug || id.slice(0, 8)}</h1>
+      <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        Edit: {formData.site_name || formData.slug || id.slice(0, 8)}
+        {isAdmin && <span style={{ fontSize: "0.65rem", fontWeight: 600, background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.5rem", borderRadius: 4 }}>ADMIN</span>}
+      </h1>
 
+      <div key={id}>
       <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f6f6f6", borderRadius: 8 }}>
         <h2 style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>Mini site details</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <input
             placeholder="Name"
-            value={edit.site_name ?? ""}
-            onChange={(e) => setEdit((s) => ({ ...s, site_name: e.target.value }))}
+            value={formData.site_name ?? ""}
+            onChange={(e) => setEdit((prev) => mergeEdit(prev, { site_name: e.target.value }))}
             style={{ padding: "0.5rem" }}
           />
           <input
             placeholder="Slug"
-            value={edit.slug ?? ""}
-            onChange={(e) => setEdit((s) => ({ ...s, slug: e.target.value }))}
+            value={formData.slug ?? ""}
+            onChange={(e) => setEdit((prev) => mergeEdit(prev, { slug: e.target.value }))}
             style={{ padding: "0.5rem" }}
           />
           <textarea
             placeholder="Bio"
-            value={edit.bio ?? ""}
-            onChange={(e) => setEdit((s) => ({ ...s, bio: e.target.value }))}
+            value={formData.bio ?? ""}
+            onChange={(e) => setEdit((prev) => mergeEdit(prev, { bio: e.target.value }))}
             rows={2}
             style={{ padding: "0.5rem" }}
           />
@@ -177,12 +409,12 @@ export default function EditMiniSitePage() {
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
               <button
                 type="button"
-                onClick={() => setEdit((s) => ({ ...s, template: "default" }))}
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "default" }))}
                 style={{
                   padding: "0.5rem 0.75rem",
                   borderRadius: 6,
-                  border: (edit.template ?? "default") === "default" ? "2px solid #6366f1" : "1px solid #ccc",
-                  background: (edit.template ?? "default") === "default" ? "#eef2ff" : "#fff",
+                  border: (formData.template ?? "default") === "default" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "default" ? "#eef2ff" : "#fff",
                   cursor: "pointer",
                   fontSize: "0.9rem",
                 }}
@@ -191,17 +423,73 @@ export default function EditMiniSitePage() {
               </button>
               <button
                 type="button"
-                onClick={() => setEdit((s) => ({ ...s, template: "investor" }))}
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "investor" }))}
                 style={{
                   padding: "0.5rem 0.75rem",
                   borderRadius: 6,
-                  border: (edit.template ?? "default") === "investor" ? "2px solid #6366f1" : "1px solid #ccc",
-                  background: (edit.template ?? "default") === "investor" ? "#eef2ff" : "#fff",
+                  border: (formData.template ?? "default") === "investor" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "investor" ? "#eef2ff" : "#fff",
                   cursor: "pointer",
                   fontSize: "0.9rem",
                 }}
               >
                 Investor feed (crypto, NFTs, feed)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "domains" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "domains" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "domains" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Domain investor (cotação, gráficos, catálogo domínios)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "premium" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "premium" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "premium" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Premium (estilo banco)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "premium_dark" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "premium_dark" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "premium_dark" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Premium Dark (luxo)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "premium_fintech" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "premium_fintech" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "premium_fintech" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Premium Fintech (moderno)
               </button>
             </div>
           </div>
@@ -209,8 +497,8 @@ export default function EditMiniSitePage() {
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Layout (columns)</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               {([1, 2, 3] as const).map((cols) => (
-                <button key={cols} type="button" onClick={() => setEdit((s) => ({ ...s, layout_columns: cols }))}
-                  style={{ padding: "0.5rem 0.75rem", borderRadius: 6, border: (edit.layout_columns ?? 1) === cols ? "2px solid #6366f1" : "1px solid #ccc", background: (edit.layout_columns ?? 1) === cols ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                <button key={cols} type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { layout_columns: cols }))}
+                  style={{ padding: "0.5rem 0.75rem", borderRadius: 6, border: (formData.layout_columns ?? 1) === cols ? "2px solid #6366f1" : "1px solid #ccc", background: (formData.layout_columns ?? 1) === cols ? "#eef2ff" : "#fff", cursor: "pointer" }}>
                   {cols} column{cols > 1 ? "s" : ""}
                 </button>
               ))}
@@ -225,7 +513,7 @@ export default function EditMiniSitePage() {
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setEdit((s) => ({ ...s, theme: t.id, primary_color: t.primary_color, accent_color: t.accent_color, bg_color: t.bg_color }))}
+                    onClick={() => setEdit((prev) => mergeEdit(prev, { theme: t.id, primary_color: t.primary_color, accent_color: t.accent_color, bg_color: t.bg_color }))}
                     title={t.name}
                     style={{
                       padding: "0.35rem 0.6rem",
@@ -235,7 +523,7 @@ export default function EditMiniSitePage() {
                       border: 0,
                       borderRadius: 4,
                       cursor: "pointer",
-                      boxShadow: edit.primary_color === t.primary_color ? "0 0 0 2px #333" : "none",
+                      boxShadow: formData.primary_color === t.primary_color ? "0 0 0 2px #333" : "none",
                     }}
                   >
                     {t.name}
@@ -244,46 +532,309 @@ export default function EditMiniSitePage() {
               })}
             </div>
             <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-              Primary <input type="color" value={edit.primary_color ?? "#6366f1"} onChange={(e) => setEdit((s) => ({ ...s, primary_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
-              Accent <input type="color" value={edit.accent_color ?? "#ec4899"} onChange={(e) => setEdit((s) => ({ ...s, accent_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
-              Background <input type="color" value={edit.bg_color ?? "#080810"} onChange={(e) => setEdit((s) => ({ ...s, bg_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
+              Primary <input type="color" value={formData.primary_color ?? "#6366f1"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { primary_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
+              Accent <input type="color" value={formData.accent_color ?? "#ec4899"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { accent_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
+              Background <input type="color" value={formData.bg_color ?? "#080810"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { bg_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
             </div>
           </div>
           <input
             placeholder="Quote symbol (BTC/ETH)"
-            value={edit.cotacao_symbol ?? ""}
-            onChange={(e) => setEdit((s) => ({ ...s, cotacao_symbol: e.target.value }))}
+            value={formData.cotacao_symbol ?? ""}
+            onChange={(e) => setEdit((prev) => mergeEdit(prev, { cotacao_symbol: e.target.value }))}
             style={{ padding: "0.5rem" }}
           />
           <input
             placeholder="Quote label (optional)"
-            value={edit.cotacao_label ?? ""}
-            onChange={(e) => setEdit((s) => ({ ...s, cotacao_label: e.target.value }))}
+            value={formData.cotacao_label ?? ""}
+            onChange={(e) => setEdit((prev) => mergeEdit(prev, { cotacao_label: e.target.value }))}
             style={{ padding: "0.5rem" }}
           />
+          {(formData.template === "investor" || formData.template === "domains") && (
+            <div>
+              <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Cor da barra do ticker</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <input type="color" value={formData.ticker_bar_color ?? "#e5e7eb"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { ticker_bar_color: e.target.value }))} style={{ width: 40, height: 32, padding: 0, border: "1px solid #ccc", borderRadius: 6, cursor: "pointer" }} />
+                <input type="text" placeholder="ex: #1e293b ou #0d9488" value={formData.ticker_bar_color ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { ticker_bar_color: e.target.value || null }))} style={{ padding: "0.5rem", width: 180 }} />
+              </div>
+            </div>
+          )}
+          {(formData.template === "default" && (formData.layout_columns === 2 || formData.layout_columns === 3)) && (
+            <div>
+              <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Ordem dos blocos (arraste para reordenar)</label>
+              <SectionOrderSortable
+                value={(formData.content_order as "cotacao_first" | "posts_first") ?? "cotacao_first"}
+                onChange={(v) => setEdit((prev) => mergeEdit(prev, { content_order: v }))}
+              />
+            </div>
+          )}
+          <section style={{ marginTop: "1.5rem", padding: "1.25rem", background: "#fff", border: "2px solid #0d9488", borderRadius: 12 }}>
+            <h3 style={{ fontSize: "1rem", margin: "0 0 1rem", color: "#0d9488" }}>📷 Upload de imagens</h3>
+            <p style={{ fontSize: "0.85rem", color: "#555", marginBottom: "1rem" }}>Envie fotos (até 4 MB) ou cole URL. Cada botão preenche o campo ao lado.</p>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Banner / capa (estilo X)</label>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <input placeholder="Banner URL (ex: https://...)" value={formData.banner_url ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { banner_url: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 200 }} />
+              <ImageUpload prefix={`${id}-banner`} label="Enviar imagem" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { banner_url: url }))} />
+            </div>
+          </div>
+          <div style={{ marginTop: "1rem" }}>
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Feed — 4 fotos (URL ou upload)</label>
+            <p style={{ fontSize: "0.8rem", color: "#666", marginBottom: "0.5rem" }}>Foto 1 também aparece como avatar.</p>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+              <input placeholder="Foto 1 URL" value={formData.feed_image_1 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_1: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
+              <ImageUpload prefix={`${id}-feed`} label="Upload 1" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_1: url }))} />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+              <input placeholder="Foto 2 URL" value={formData.feed_image_2 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_2: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
+              <ImageUpload prefix={`${id}-feed`} label="Upload 2" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_2: url }))} />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+              <input placeholder="Foto 3 URL" value={formData.feed_image_3 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_3: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
+              <ImageUpload prefix={`${id}-feed`} label="Upload 3" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_3: url }))} />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <input placeholder="Foto 4 URL" value={formData.feed_image_4 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_4: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
+              <ImageUpload prefix={`${id}-feed`} label="Upload 4" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_4: url }))} />
+            </div>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Galeria</label>
+            <p style={{ fontSize: "0.8rem", color: "#666", marginBottom: "0.5rem" }}>URL e legenda (opcional) ou envie imagem para adicionar.</p>
+            <div style={{ marginBottom: "0.5rem" }}>
+              <ImageUpload prefix={`${id}-gallery`} label="+ Enviar e adicionar à galeria" onUpload={(url) => setEdit((prev) => { const base = prev && prev.id === id ? prev : site; const list = Array.isArray(base.gallery_images) ? base.gallery_images : []; return mergeEdit(prev, { gallery_images: [...list, { url, caption: "" }] }); })} />
+            </div>
+            {(Array.isArray(formData.gallery_images) ? formData.gallery_images : []).map((item, idx) => (
+              <div key={idx} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
+                <input
+                  placeholder="URL da imagem"
+                  value={item.url}
+                  onChange={(e) => {
+                    const base = formData.id === id ? formData : site;
+                    const next = [...(base.gallery_images || [])];
+                    next[idx] = { ...next[idx], url: e.target.value };
+                    setEdit((prev) => mergeEdit(prev, { gallery_images: next }));
+                  }}
+                  style={{ padding: "0.5rem", flex: 1, minWidth: 180 }}
+                />
+                <input
+                  placeholder="Legenda"
+                  value={item.caption ?? ""}
+                  onChange={(e) => {
+                    const base = formData.id === id ? formData : site;
+                    const next = [...(base.gallery_images || [])];
+                    next[idx] = { ...next[idx], caption: e.target.value || undefined };
+                    setEdit((prev) => mergeEdit(prev, { gallery_images: next }));
+                  }}
+                  style={{ padding: "0.5rem", width: "12rem" }}
+                />
+                <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { gallery_images: (formData.gallery_images || []).filter((_, i) => i !== idx) }))} style={{ padding: "0.5rem", background: "#dc2626", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}>Remover</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { gallery_images: [...(formData.gallery_images || []), { url: "", caption: "" }] }))} style={{ padding: "0.4rem 0.75rem", background: "#22c55e", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer", fontSize: "0.9rem" }}>+ Adicionar à galeria</button>
+          </div>
+          </section>
           <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Monthly (USDC)</label>
             <input
               placeholder="29.90 (default, empty = free)"
-              value={edit.monthly_price_usdc ?? ""}
-              onChange={(e) => setEdit((s) => ({ ...s, monthly_price_usdc: e.target.value || null, subscription_plan: e.target.value ? "monthly" : null }))}
+              value={formData.monthly_price_usdc ?? ""}
+              onChange={(e) => setEdit((prev) => mergeEdit(prev, { monthly_price_usdc: e.target.value || null, subscription_plan: e.target.value ? "monthly" : null }))}
               style={{ padding: "0.5rem", width: "12rem" }}
             />
-            {edit.next_billing_at && (
+            {formData.next_billing_at && (
               <p style={{ fontSize: "0.85rem", color: "#555", marginTop: "0.25rem" }}>
-                Next billing: {new Date(edit.next_billing_at).toLocaleDateString()}
+                Next billing: {new Date(formData.next_billing_at).toLocaleDateString()}
               </p>
+            )}
+            {(formData.monthly_price_usdc ?? site?.monthly_price_usdc) && parseFloat(formData.monthly_price_usdc ?? site?.monthly_price_usdc ?? "0") > 0 && (
+              <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                {!hasItem("MINISITE_SUBSCRIPTION", id) && (
+                  <button
+                    type="button"
+                    onClick={() => addItem({
+                      type: "MINISITE_SUBSCRIPTION",
+                      reference_id: id,
+                      label: `Subscription: ${site?.site_name || site?.slug || id}`,
+                      amount_usdc: (formData.monthly_price_usdc ?? site?.monthly_price_usdc) ?? "29.90",
+                    })}
+                    style={{ padding: "0.4rem 0.75rem", background: "#334155", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", fontSize: "0.9rem" }}
+                  >
+                    Add subscription to cart
+                  </button>
+                )}
+                <Link href="/cart" style={{ fontSize: "0.9rem", color: "#0066cc" }}>View cart</Link>
+              </div>
             )}
           </div>
           <button
             type="button"
-            onClick={() => updateMutation.mutate(edit)}
-            disabled={updateMutation.isPending}
-            style={{ padding: "0.5rem 1rem", background: "#333", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}
+            onClick={() => updateMutation.mutate(formData)}
+            disabled={updateMutation.isPending || formData.id !== id}
+            style={{ padding: "0.5rem 1rem", background: formData.id !== id ? "#999" : "#333", color: "#fff", border: 0, borderRadius: 6, cursor: formData.id !== id ? "not-allowed" : "pointer", alignSelf: "flex-start" }}
           >
-            {updateMutation.isPending ? "Saving…" : "Save"}
+            {updateMutation.isPending ? "Saving…" : formData.id !== id ? "Carregando este site…" : "Save"}
           </button>
         </div>
+      </section>
+
+      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f0fdf4", borderRadius: 8, border: "1px solid #86efac" }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Analytics</h2>
+        <p style={{ fontSize: "0.85rem", color: "#166534", marginBottom: "0.75rem" }}>Page views and visitors for this mini site.</p>
+        {analytics ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+              <div>
+                <span style={{ fontSize: "0.8rem", color: "#666" }}>Total views</span>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#15803d" }}>{analytics.total_views}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: "0.8rem", color: "#666" }}>Unique visitors</span>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#15803d" }}>{analytics.unique_visitors}</div>
+              </div>
+            </div>
+            {analytics.by_path && analytics.by_path.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>By page</h3>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #ccc" }}>
+                      <th style={{ textAlign: "left", padding: "0.35rem 0" }}>Path</th>
+                      <th style={{ textAlign: "right", padding: "0.35rem 0" }}>Views</th>
+                      <th style={{ textAlign: "right", padding: "0.35rem 0" }}>Uniques</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.by_path.map((row) => (
+                      <tr key={row.path} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "0.35rem 0" }}>{row.path || "/"}</td>
+                        <td style={{ textAlign: "right", padding: "0.35rem 0" }}>{row.views}</td>
+                        <td style={{ textAlign: "right", padding: "0.35rem 0" }}>{row.uniques}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {analytics.by_day && analytics.by_day.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>By day (last 14)</h3>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #ccc" }}>
+                      <th style={{ textAlign: "left", padding: "0.35rem 0" }}>Date</th>
+                      <th style={{ textAlign: "right", padding: "0.35rem 0" }}>Views</th>
+                      <th style={{ textAlign: "right", padding: "0.35rem 0" }}>Uniques</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.by_day.slice(-14).map((row) => (
+                      <tr key={row.date} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "0.35rem 0" }}>{row.date}</td>
+                        <td style={{ textAlign: "right", padding: "0.35rem 0" }}>{row.views}</td>
+                        <td style={{ textAlign: "right", padding: "0.35rem 0" }}>{row.uniques}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {analytics.by_referrer && analytics.by_referrer.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>Where visitors come from (source)</h3>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #ccc" }}>
+                      <th style={{ textAlign: "left", padding: "0.35rem 0" }}>Source / referrer</th>
+                      <th style={{ textAlign: "right", padding: "0.35rem 0" }}>Views</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.by_referrer.map((row) => (
+                      <tr key={row.source} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "0.35rem 0", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis" }} title={row.source}>{row.source === "direct" ? "Direct / typed URL" : row.source}</td>
+                        <td style={{ textAlign: "right", padding: "0.35rem 0" }}>{row.views}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {analytics.recent_clicks && analytics.recent_clicks.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>Recent clicks</h3>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #ccc" }}>
+                      <th style={{ textAlign: "left", padding: "0.35rem 0" }}>Label / target</th>
+                      <th style={{ textAlign: "left", padding: "0.35rem 0" }}>Path</th>
+                      <th style={{ textAlign: "left", padding: "0.35rem 0" }}>When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.recent_clicks.slice(0, 20).map((c, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "0.35rem 0" }}>{c.label || "—"}</td>
+                        <td style={{ padding: "0.35rem 0" }}>{c.path || "/"}</td>
+                        <td style={{ padding: "0.35rem 0", fontSize: "0.8rem", color: "#666" }}>{new Date(c.at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p style={{ fontSize: "0.9rem", color: "#666" }}>No data yet. Views are recorded when someone opens your mini site.</p>
+        )}
+      </section>
+
+      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#eff6ff", borderRadius: 8, border: "1px solid #93c5fd" }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Premium Domains (domain investor)</h2>
+        <p style={{ fontSize: "0.85rem", color: "#1e40af", marginBottom: "0.75rem" }}>
+          Catálogo de domínios para venda. Cada domínio ganha uma página indexável em trustbank.xyz/d/[slug]. Use o template &quot;Investor feed&quot; para exibir a lista no mini site.
+        </p>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "1rem" }}>
+          {listedDomains.map((d) => (
+            <li key={d.id} style={{ padding: "0.5rem 0", borderBottom: "1px solid #bfdbfe", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+              <span>
+                <strong>{d.name}</strong>
+                {d.price && ` — $${d.price}`}
+                {d.status !== "available" && <span style={{ marginLeft: 6, fontSize: "0.8rem", color: "#64748b" }}>({d.status})</span>}
+              </span>
+              <span style={{ display: "flex", gap: "0.5rem" }}>
+                <Link href={`/d/${d.slug}`} target="_blank" style={{ fontSize: "0.85rem", color: "#2563eb" }}>Ver página</Link>
+                <button type="button" onClick={() => { setEditingDomainId(d.id); setDomainForm({ name: d.name, price: d.price ?? "", description: d.description ?? "", link: d.link ?? "" }); }} style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", background: "#e0e7ff", border: 0, borderRadius: 4, cursor: "pointer" }}>Editar</button>
+                <button type="button" onClick={() => deleteDomainMutation.mutate(d.id)} style={{ padding: "0.25rem 0.5rem", fontSize: "0.8rem", background: "#fecaca", border: 0, borderRadius: 4, cursor: "pointer" }}>Remover</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>{editingDomainId ? "Editar domínio" : "Novo domínio"}</h3>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!domainForm.name.trim()) return;
+            if (editingDomainId) {
+              updateDomainMutation.mutate({ domainId: editingDomainId, payload: { name: domainForm.name.trim(), price: domainForm.price || undefined, description: domainForm.description || undefined, link: domainForm.link || undefined } });
+            } else {
+              createDomainMutation.mutate({ name: domainForm.name.trim(), price: domainForm.price || undefined, description: domainForm.description || undefined, link: domainForm.link || undefined });
+            }
+          }}
+          style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
+        >
+          <input placeholder="Nome do domínio (ex: carinsurance.ai)" value={domainForm.name} onChange={(e) => setDomainForm((f) => ({ ...f, name: e.target.value }))} style={{ padding: "0.5rem" }} required />
+          <input placeholder="Preço (ex: 8000 ou 12.000)" value={domainForm.price} onChange={(e) => setDomainForm((f) => ({ ...f, price: e.target.value }))} style={{ padding: "0.5rem" }} />
+          <textarea placeholder="Descrição (SEO)" value={domainForm.description} onChange={(e) => setDomainForm((f) => ({ ...f, description: e.target.value }))} rows={2} style={{ padding: "0.5rem" }} />
+          <input placeholder="Link (Make offer / Buy now URL)" value={domainForm.link} onChange={(e) => setDomainForm((f) => ({ ...f, link: e.target.value }))} style={{ padding: "0.5rem" }} />
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="submit" disabled={createDomainMutation.isPending || updateDomainMutation.isPending} style={{ padding: "0.5rem 1rem", background: "#2563eb", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>
+              {editingDomainId ? "Salvar" : "Adicionar domínio"}
+            </button>
+            {editingDomainId && (
+              <button type="button" onClick={() => { setEditingDomainId(null); setDomainForm({ name: "", price: "", description: "", link: "" }); }} style={{ padding: "0.5rem 1rem", background: "#94a3b8", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>Cancelar</button>
+            )}
+          </div>
+        </form>
       </section>
 
       <section style={{ marginBottom: "2rem" }}>
@@ -291,12 +842,12 @@ export default function EditMiniSitePage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (ideaForm.title || ideaForm.content) addIdeaMutation.mutate(ideaForm);
+            if (ideaForm.title || ideaForm.content || ideaForm.image_url) addIdeaMutation.mutate(ideaForm);
           }}
           style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1rem" }}
         >
           <input
-            placeholder="Idea title"
+            placeholder="Idea / post title"
             value={ideaForm.title}
             onChange={(e) => setIdeaForm((f) => ({ ...f, title: e.target.value }))}
             style={{ padding: "0.5rem" }}
@@ -308,12 +859,18 @@ export default function EditMiniSitePage() {
             rows={2}
             style={{ padding: "0.5rem" }}
           />
+          <input
+            placeholder="Image URL (optional)"
+            value={ideaForm.image_url}
+            onChange={(e) => setIdeaForm((f) => ({ ...f, image_url: e.target.value }))}
+            style={{ padding: "0.5rem" }}
+          />
           <button
             type="submit"
             disabled={addIdeaMutation.isPending}
             style={{ padding: "0.5rem 1rem", background: "#333", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}
           >
-            Add idea
+            Add idea / post
           </button>
         </form>
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -330,8 +887,9 @@ export default function EditMiniSitePage() {
                 alignItems: "flex-start",
               }}
             >
-              <div>
+              <div style={{ flex: 1 }}>
                 {idea.title && <strong style={{ display: "block" }}>{idea.title}</strong>}
+                {idea.image_url && <img src={idea.image_url} alt="" style={{ maxWidth: "100%", height: "auto", borderRadius: 6, marginTop: "0.25rem", maxHeight: 200, objectFit: "cover" }} />}
                 {idea.content && <p style={{ margin: "0.25rem 0 0", fontSize: "0.9rem", color: "#444" }}>{idea.content}</p>}
               </div>
               <button
@@ -347,16 +905,141 @@ export default function EditMiniSitePage() {
         </ul>
       </section>
 
+      <section style={{ marginBottom: "2rem", padding: "1.25rem", background: "#faf5ff", borderRadius: 12, border: "2px solid #7c3aed" }}>
+        <style dangerouslySetInnerHTML={{ __html: articleBackgroundStyles }} />
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem", color: "#5b21b6" }}>📄 Páginas extras / Artigos</h2>
+        <p style={{ fontSize: "0.9rem", color: "#6b21a8", marginBottom: "0.5rem" }}>
+          1 página inclusa. Páginas adicionais por $5,00 cada (até 10).
+        </p>
+        <p style={{ fontSize: "0.95rem", color: "#4c1d95", marginBottom: "1rem", fontWeight: 600 }}>
+          Editor rico: página branca com linhas, negrito, itálico, fontes, tamanhos, cores, imagens e links. Escolha o fundo abaixo.
+        </p>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, marginBottom: "1rem" }}>
+          {extraPages.map((p) => (
+            <li key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid #e9d5ff" }}>
+              <span>
+                <strong>{p.title}</strong> — /{p.page_slug}
+                {site.slug && (
+                  <Link href={`/s/${site.slug}/p/${p.page_slug}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#7c3aed" }}>Ver</Link>
+                )}
+              </span>
+              <span style={{ display: "flex", gap: "0.5rem" }}>
+                <button type="button" onClick={() => { setEditingPageId(p.id); setPageForm({ title: p.title, page_slug: p.page_slug, content_html: p.content_html || "", background: p.background || "default" }); }} style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", background: "#7c3aed", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}>Editar</button>
+                <button type="button" onClick={() => deletePageMutation.mutate(p.id)} disabled={deletePageMutation.isPending} style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", background: "#dc2626", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}>Excluir</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>{editingPageId ? "Editar página" : "Nova página"}</h3>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (editingPageId) {
+              updatePageMutation.mutate({ pageId: editingPageId, payload: { title: pageForm.title, page_slug: pageForm.page_slug, content_html: pageForm.content_html, background: pageForm.background } });
+            } else {
+              createPageMutation.mutate(pageForm);
+            }
+          }}
+          style={{ display: "flex", flexDirection: "column", gap: "0.75rem", maxWidth: 640 }}
+        >
+          <input placeholder="Título da página" value={pageForm.title} onChange={(e) => setPageForm((f) => ({ ...f, title: e.target.value }))} style={{ padding: "0.5rem" }} />
+          <input placeholder="Slug da página (ex: sobre-nos)" value={pageForm.page_slug} onChange={(e) => setPageForm((f) => ({ ...f, page_slug: e.target.value }))} style={{ padding: "0.5rem" }} />
+          <div>
+            <label style={{ display: "block", fontSize: "0.9rem", marginBottom: "0.35rem" }}>Fundo da página</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              {BACKGROUND_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPageForm((f) => ({ ...f, background: opt.value }))}
+                  style={{
+                    padding: "0.35rem 0.6rem",
+                    fontSize: "0.8rem",
+                    background: pageForm.background === opt.value ? "#7c3aed" : "#e9d5ff",
+                    color: pageForm.background === opt.value ? "#fff" : "#5b21b6",
+                    border: 0,
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "1rem", marginBottom: "0.5rem", fontWeight: 600 }}>Conteúdo do artigo — escreva aqui (página com linhas)</label>
+            <div className={getArticleBackgroundClass(pageForm.background)} style={{ border: "1px solid #c4b5fd", borderRadius: 8, padding: "1rem", minHeight: 360, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+              <RichTextEditor value={pageForm.content_html} onChange={(html) => setPageForm((f) => ({ ...f, content_html: html }))} placeholder="Use a barra de ferramentas: títulos, negrito, itálico, fontes, tamanhos, cores, listas, links, imagens..." minHeight={320} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button type="submit" disabled={createPageMutation.isPending || updatePageMutation.isPending} style={{ padding: "0.5rem 1rem", background: "#7c3aed", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>
+              {editingPageId ? "Salvar página" : "Salvar página"}
+            </button>
+            {editingPageId && <button type="button" onClick={() => { setEditingPageId(null); setPageForm({ title: "", page_slug: "", content_html: "", background: "white-lines" }); }} style={{ padding: "0.5rem 1rem", background: "#64748b", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>Cancelar</button>}
+          </div>
+        </form>
+      </section>
+
+      <section style={{ marginBottom: "2rem", padding: "1.25rem", background: "#ecfdf5", borderRadius: 12, border: "1px solid #a7f3d0" }}>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem", color: "#065f46" }}>Vídeos do negócio (flip card + corretora)</h2>
+        <p style={{ fontSize: "0.85rem", color: "#047857", marginBottom: "1rem" }}>
+          Vincule vídeos ao mini site para exibir o card com frente (embed) e verso (cotação/shares). A corretora fica embaçada até o usuário ter NFT do clube.
+        </p>
+        <p style={{ fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+          <Link href="/site/edit" target="_blank" rel="noopener noreferrer" style={{ color: "#059669", fontWeight: 600 }}>Videos &amp; paywall</Link> — pegue o ID do vídeo na lista (ex: ao lado do título).
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginBottom: "1rem" }}>
+          <input placeholder="ID do vídeo (uuid)" value={videoIdToAdd} onChange={(e) => setVideoIdToAdd(e.target.value)} style={{ padding: "0.5rem", width: 280, maxWidth: "100%" }} />
+          <button type="button" onClick={() => videoIdToAdd && addVideoMutation.mutate(videoIdToAdd)} disabled={!videoIdToAdd || addVideoMutation.isPending} style={{ padding: "0.5rem 1rem", background: "#059669", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>
+            {addVideoMutation.isPending ? "Adicionando…" : "Adicionar vídeo"}
+          </button>
+        </div>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {(site.mini_site_videos ?? []).map((msv) => (
+            <li key={msv.video.id} style={{ padding: "0.75rem", marginBottom: "0.5rem", background: "#fff", borderRadius: 8, border: "1px solid #a7f3d0", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+              <span style={{ fontWeight: 500 }}>{msv.video.title || msv.video.youtube_id}</span>
+              <span style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button type="button" onClick={() => { setEditingQuotationVideoId(msv.video.id); setQuotationForm({ total_shares: msv.video.quotation?.total_shares ?? 1000000, system_percent: (msv.video.quotation as { system_percent?: number })?.system_percent ?? 20, sellable_percent: (msv.video.quotation as { sellable_percent?: number })?.sellable_percent ?? 70, valuation_usdc: msv.video.quotation?.valuation_usdc ?? "", ticker_symbol: msv.video.quotation?.ticker_symbol ?? "", revenue_usdc: msv.video.quotation?.revenue_usdc ?? "" }); }} style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", background: "#0d9488", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}>Cotação</button>
+                <button type="button" onClick={() => removeVideoMutation.mutate(msv.video.id)} disabled={removeVideoMutation.isPending} style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", background: "#dc2626", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}>Remover</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+        {editingQuotationVideoId && (
+          <div style={{ marginTop: "1rem", padding: "1rem", background: "#fff", borderRadius: 8, border: "1px solid #a7f3d0" }}>
+            <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>Editar cotação (verso do flip card)</h3>
+            <p style={{ fontSize: "0.8rem", color: "#047857", marginBottom: "0.5rem" }}>20% sistema; 50–80% vendidos a investidores. Receita dividida entre cotas.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: 400 }}>
+              <label>Total de shares <input type="number" value={quotationForm.total_shares} onChange={(e) => setQuotationForm((f) => ({ ...f, total_shares: parseInt(e.target.value, 10) || 0 }))} style={{ marginLeft: 8, padding: "0.25rem" }} /></label>
+              <label>Sistema % (fixo) <input type="number" min={0} max={100} value={quotationForm.system_percent} onChange={(e) => setQuotationForm((f) => ({ ...f, system_percent: parseInt(e.target.value, 10) || 0 }))} style={{ marginLeft: 8, padding: "0.25rem", width: 60 }} /></label>
+              <label>Vendível % (50–80) <input type="number" min={50} max={80} value={quotationForm.sellable_percent} onChange={(e) => setQuotationForm((f) => ({ ...f, sellable_percent: parseInt(e.target.value, 10) || 70 }))} style={{ marginLeft: 8, padding: "0.25rem", width: 60 }} /></label>
+              <label>Valor est. USDC <input value={quotationForm.valuation_usdc} onChange={(e) => setQuotationForm((f) => ({ ...f, valuation_usdc: e.target.value }))} placeholder="ex: 150000" style={{ marginLeft: 8, padding: "0.25rem" }} /></label>
+              <label>Ticker (ex: $QLL40) <input value={quotationForm.ticker_symbol} onChange={(e) => setQuotationForm((f) => ({ ...f, ticker_symbol: e.target.value }))} style={{ marginLeft: 8, padding: "0.25rem" }} /></label>
+              <label>Receita USDC <input value={quotationForm.revenue_usdc} onChange={(e) => setQuotationForm((f) => ({ ...f, revenue_usdc: e.target.value }))} placeholder="acumulada" style={{ marginLeft: 8, padding: "0.25rem" }} /></label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button type="button" onClick={() => updateQuotationMutation.mutate({ videoId: editingQuotationVideoId, payload: { ...quotationForm, admin_wallet: address } })} disabled={updateQuotationMutation.isPending || !address} style={{ padding: "0.5rem 1rem", background: "#059669", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>Salvar (só admin)</button>
+                <button type="button" onClick={() => setEditingQuotationVideoId(null)} style={{ padding: "0.5rem 1rem", background: "#64748b", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
       {site.slug && (
         <p>
-          <Link href={`/s/${site.slug}`} style={{ color: "#0066cc" }}>View public mini site →</Link>
+          <Link href={`/s/${site.slug}`} style={{ color: "#0066cc" }}>Ver mini site →</Link>
+          {site.slug.startsWith("@") && (
+            <span style={{ marginLeft: "0.5rem", color: "#1e3a8a", fontWeight: 600 }}>trustbank.xyz/{site.slug}</span>
+          )}
           {" · "}
-          <Link href="/market" style={{ color: "#0066cc" }}>Slug marketplace</Link>
+          <Link href="/market" style={{ color: "#0066cc" }}>Marketplace</Link>
         </p>
       )}
 
-      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
-        <h2 style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>List on marketplace</h2>
+      <section id="marketplace" style={{ marginBottom: "2rem", padding: "1rem", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
+        <h2 style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>Vender, leilão ou transferir</h2>
         {!address ? (
           <p style={{ fontSize: "0.9rem", color: "#555" }}>Connect your wallet to list this mini-site for sale or auction. Seller receives 90% (10% platform fee).</p>
         ) : myListing && myListing.status === "active" ? (
@@ -411,14 +1094,15 @@ export default function EditMiniSitePage() {
         )}
       </section>
 
-      {edit.monthly_price_usdc && parseFloat(edit.monthly_price_usdc) > 0 && (
+      {formData.monthly_price_usdc && parseFloat(formData.monthly_price_usdc) > 0 && (
         <section style={{ marginTop: "2rem", padding: "1rem", background: "#f0fdf4", borderRadius: 8, border: "1px solid #86efac" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Pay subscription</h2>
           <p style={{ fontSize: "0.9rem", color: "#166534", marginBottom: "0.5rem" }}>
-            Amount: <strong>{edit.monthly_price_usdc} USDC</strong>/month. Get destination and amount from <strong>GET /api/payments/config?type=MINISITE_SUBSCRIPTION&amp;reference_id={site.id}</strong>, pay in USDC, then call <strong>POST /api/payments/verify</strong> with type=MINISITE_SUBSCRIPTION, reference_id={site.id} and tx_hash.
+            Amount: <strong>{formData.monthly_price_usdc} USDC</strong>/month. Get destination and amount from <strong>GET /api/payments/config?type=MINISITE_SUBSCRIPTION&amp;reference_id={site.id}</strong>, pay in USDC, then call <strong>POST /api/payments/verify</strong> with type=MINISITE_SUBSCRIPTION, reference_id={site.id} and tx_hash.
           </p>
         </section>
       )}
+      </div>
     </main>
   );
 }

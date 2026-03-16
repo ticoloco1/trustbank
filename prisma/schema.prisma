@@ -11,15 +11,19 @@ datasource db {
 }
 
 model PlatformSetting {
-  id                    Int      @id @default(1)
-  platform_name         String?  @map("platform_name")
-  logo_url              String?  @map("logo_url")
-  hero_text             String?  @map("hero_text")
-  grid_columns         Int?     @map("grid_columns")
-  google_client_id      String?  @map("google_client_id")      // admin panel; fallback: env
-  google_client_secret  String?  @map("google_client_secret")
-  youtube_api_key      String?  @map("youtube_api_key")
-  updated_at            DateTime @updatedAt @map("updated_at")
+  id                      Int      @id @default(1)
+  platform_name           String?  @map("platform_name")
+  logo_url                String?  @map("logo_url")
+  hero_text               String?  @map("hero_text")
+  grid_columns            Int?     @map("grid_columns")
+  google_client_id        String?  @map("google_client_id")      // admin panel; fallback: env
+  google_client_secret    String?  @map("google_client_secret")
+  youtube_api_key         String?  @map("youtube_api_key")
+  slug_claim_default_usd  String?  @map("slug_claim_default_usd")   // ex: 12.90
+  slug_claim_premium_usd  String?  @map("slug_claim_premium_usd")   // ex: 99.00
+  slug_claim_letter_usd   String?  @map("slug_claim_letter_usd")    // ex: 299.00
+  slug_allowed_override   Json?    @map("slug_allowed_override")    // ["word1", "word2"] — liberar @ mesmo bloqueados
+  updated_at              DateTime @updatedAt @map("updated_at")
   @@map("platform_settings")
 }
 
@@ -48,6 +52,14 @@ model MiniSite {
   bg_color             String?  @map("bg_color")        // hex
   cotacao_symbol       String?  @map("cotacao_symbol")
   cotacao_label        String?  @map("cotacao_label")
+  ticker_bar_color     String?  @map("ticker_bar_color")  // cor da barra do ticker (template investidor)
+  content_order        String?  @map("content_order")     // "cotacao_first" | "posts_first" para colunas
+  banner_url           String?  @map("banner_url")     // capa estilo X atrás da foto de perfil
+  feed_image_1         String?  @map("feed_image_1")   // até 4 fotos no feed
+  feed_image_2         String?  @map("feed_image_2")
+  feed_image_3         String?  @map("feed_image_3")
+  feed_image_4         String?  @map("feed_image_4")
+  gallery_images       Json?    @map("gallery_images") // [{ url, caption? }, ...]
   subscription_plan    String?  @map("subscription_plan")   // free | monthly
   monthly_price_usdc   String?  @map("monthly_price_usdc") // ex: "9.99"
   next_billing_at      DateTime? @map("next_billing_at")   // próxima cobrança mensal
@@ -58,7 +70,157 @@ model MiniSite {
   ideas                Idea[]
   slug_listings        SlugListing[]
   payments             Payment[]
+  analytics_events     MiniSiteAnalyticsEvent[]
+  extra_pages          MiniSitePage[]
+  listed_domains       ListedDomain[]
+  mini_site_videos     MiniSiteVideo[]
+  club_nft_contract    String?  @map("club_nft_contract")   // NFT do clube — quem tem acessa a corretora
+  club_nft_name        String?  @map("club_nft_name")       // ex: "TrustBank Investment Club"
   @@map("mini_sites")
+}
+
+// Vídeos vinculados ao mini site (para flip card + corretora de shares)
+model MiniSiteVideo {
+  id           String   @id @default(uuid())
+  mini_site_id String   @map("mini_site_id")
+  video_id     String   @map("video_id")
+  sort_order   Int      @default(0) @map("sort_order")
+  created_at   DateTime @default(now()) @map("created_at")
+  mini_site    MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  video        Video    @relation(fields: [video_id], references: [id], onDelete: Cascade)
+  @@unique([mini_site_id, video_id])
+  @@index([mini_site_id])
+  @@map("mini_site_videos")
+}
+
+// Cotação do vídeo (verso do flip card — negociação de shares)
+model VideoQuotation {
+  id               String   @id @default(uuid())
+  video_id         String   @unique @map("video_id")
+  total_shares     Int      @default(1000000) @map("total_shares")   // ex: 1.000.000
+  system_percent   Int      @default(20) @map("system_percent")       // 20% sempre do sistema
+  sellable_percent Int      @default(70) @map("sellable_percent")    // 50–80% vendidos a investidores
+  valuation_usdc   String?  @map("valuation_usdc")                    // valor estimado (ex: 150000)
+  ticker_symbol    String?  @map("ticker_symbol")                     // ex: $QLL40
+  revenue_usdc     String?  @map("revenue_usdc")                     // receita acumulada
+  created_at       DateTime @default(now()) @map("created_at")
+  updated_at       DateTime @updatedAt @map("updated_at")
+  video            Video    @relation(fields: [video_id], references: [id], onDelete: Cascade)
+  @@map("video_quotations")
+}
+
+// Participações (cotas) por vídeo — quem possui quantas shares
+model VideoShareHolding {
+  id           String   @id @default(uuid())
+  video_id     String   @map("video_id")
+  owner_wallet String   @map("owner_wallet")
+  shares       Int      @map("shares")   // quantidade de cotas
+  created_at   DateTime @default(now()) @map("created_at")
+  updated_at   DateTime @updatedAt @map("updated_at")
+  video        Video    @relation(fields: [video_id], references: [id], onDelete: Cascade)
+  @@unique([video_id, owner_wallet])
+  @@index([video_id])
+  @@index([owner_wallet])
+  @@map("video_share_holdings")
+}
+
+// Ordens de venda/compra de shares (corretora — tipo Binance)
+model VideoShareOrder {
+  id                  String    @id @default(uuid())
+  video_id            String    @map("video_id")
+  order_type          String    @map("order_type")   // sell | buy
+  wallet              String    @map("wallet")
+  amount_shares       Int       @map("amount_shares")
+  price_per_share_usdc String   @map("price_per_share_usdc")
+  status              String    @default("active") @map("status")  // active | filled | cancelled
+  created_at          DateTime  @default(now()) @map("created_at")
+  filled_at           DateTime? @map("filled_at")
+  counterparty_wallet String?  @map("counterparty_wallet")  // quem comprou/vendeu na outra ponta
+  video               Video     @relation(fields: [video_id], references: [id], onDelete: Cascade)
+  @@index([video_id, status])
+  @@index([wallet])
+  @@map("video_share_orders")
+}
+
+// Receita mensal do vídeo (YouTube ads + TrustBank) — base para rateio
+model VideoRevenueEvent {
+  id           String   @id @default(uuid())
+  video_id     String   @map("video_id")
+  period_start DateTime @map("period_start")   // início do mês
+  period_end   DateTime @map("period_end")    // fim do mês
+  amount_usdc  String   @map("amount_usdc")   // ex: "3000"
+  source       String   @default("youtube_ads") @map("source")  // youtube_ads | platform
+  reported_at  DateTime @default(now()) @map("reported_at")
+  video        Video    @relation(fields: [video_id], references: [id], onDelete: Cascade)
+  distributions VideoRevenueDistribution[]
+  @@unique([video_id, period_start])
+  @@index([video_id])
+  @@map("video_revenue_events")
+}
+
+// Rateio da receita por investidor (quem tem cotas recebe proporcional)
+model VideoRevenueDistribution {
+  id                String            @id @default(uuid())
+  revenue_event_id  String            @map("revenue_event_id")
+  holder_wallet     String            @map("holder_wallet")
+  shares_at_time    Int               @map("shares_at_time")   // cotas do holder no período
+  revenue_amount_usdc String          @map("revenue_amount_usdc")
+  paid_at           DateTime?         @map("paid_at")         // quando foi pago (USDC)
+  revenue_event     VideoRevenueEvent @relation(fields: [revenue_event_id], references: [id], onDelete: Cascade)
+  @@index([revenue_event_id])
+  @@index([holder_wallet])
+  @@map("video_revenue_distributions")
+}
+
+// Catálogo de domínios do mini site (domain investor) — cada um com página indexável em /d/[slug]
+model ListedDomain {
+  id           String   @id @default(uuid())
+  mini_site_id String   @map("mini_site_id")
+  name         String   @map("name")       // ex: carinsurance.ai
+  slug         String   @unique @map("slug") // ex: carinsurance-ai (para URL /d/carinsurance-ai)
+  price        String?  @map("price")      // ex: "8000" ou "12.000"
+  description  String?  @map("description") @db.Text  // texto SEO
+  link         String?  @map("link")       // URL make offer / buy
+  status       String   @default("available") @map("status")  // available | sold | reserved
+  sort_order   Int      @default(0) @map("sort_order")
+  created_at   DateTime @default(now()) @map("created_at")
+  updated_at   DateTime @updatedAt @map("updated_at")
+  mini_site    MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  @@index([mini_site_id])
+  @@map("listed_domains")
+}
+
+// Páginas extras / artigos do mini site (rich text, fundo configurável)
+model MiniSitePage {
+  id             String   @id @default(uuid())
+  mini_site_id   String   @map("mini_site_id")
+  title          String   @map("title")
+  page_slug      String   @map("page_slug")   // ex: sobre-nos, bitcoin-analysis
+  content_html   String?  @map("content_html") @db.Text  // HTML do rich text
+  background     String?  @default("default") @map("background")  // default | white | yellow | blue | grey | beige | orange
+  sort_order     Int      @default(0) @map("sort_order")
+  created_at     DateTime @default(now()) @map("created_at")
+  updated_at     DateTime @updatedAt @map("updated_at")
+  mini_site      MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  @@unique([mini_site_id, page_slug])
+  @@index([mini_site_id])
+  @@map("mini_site_pages")
+}
+
+// Analytics por mini site e página (page views, cliques, origem)
+model MiniSiteAnalyticsEvent {
+  id           String   @id @default(uuid())
+  mini_site_id String   @map("mini_site_id")
+  path         String   @default("/") @map("path")
+  event_type   String   @default("page_view") @map("event_type")  // page_view | click
+  visitor_key  String?  @map("visitor_key")
+  referrer     String?  @map("referrer")       // de onde veio (document.referrer ou "direct")
+  click_label  String?  @map("click_label")    // para event_type=click: botão/link clicado
+  created_at   DateTime @default(now()) @map("created_at")
+  mini_site    MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  @@index([mini_site_id, created_at])
+  @@index([mini_site_id, path, created_at])
+  @@map("mini_site_analytics_events")
 }
 
 // Slug listing: sell or auction. Mini site slug or company/@ handle. Shown on main site + mini sites.
@@ -110,15 +272,16 @@ model SlugPurchase {
   @@map("slug_purchases")
 }
 
-// Ideias vinculadas ao mini site (Prisma)
+// Ideias vinculadas ao mini site (Prisma) — posts com título, texto e imagem opcional
 model Idea {
-  id          String   @id @default(uuid())
-  mini_site_id String  @map("mini_site_id")
-  title       String?
-  content     String?
-  created_at  DateTime @default(now()) @map("created_at")
-  updated_at  DateTime @updatedAt @map("updated_at")
-  mini_site   MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  mini_site_id String   @map("mini_site_id")
+  title        String?
+  content      String?
+  image_url    String?  @map("image_url")
+  created_at   DateTime @default(now()) @map("created_at")
+  updated_at   DateTime @updatedAt @map("updated_at")
+  mini_site    MiniSite @relation(fields: [mini_site_id], references: [id], onDelete: Cascade)
   @@map("ideas")
 }
 
@@ -129,6 +292,31 @@ model AdminWalletAddress {
   note           String?
   created_at     DateTime @default(now()) @map("created_at")
   @@map("admin_wallet_addresses")
+}
+
+// Créditos TrustBank: 1 crédito = 1 USDC. Só se compra/vende shares com créditos; retirada vira USDC na carteira.
+model CreditBalance {
+  id           String   @id @default(uuid())
+  wallet       String   @unique @map("wallet")
+  balance_usdc String   @default("0") @map("balance_usdc")   // saldo em USDC (string para precisão)
+  updated_at   DateTime @updatedAt @map("updated_at")
+  @@map("credit_balances")
+}
+
+// Histórico: depósito (USDC→créditos), retirada (créditos→USDC), compra/venda de shares (créditos).
+model CreditTransaction {
+  id              String   @id @default(uuid())
+  wallet          String   @map("wallet")
+  type            String   @map("type")   // deposit | withdrawal | share_buy | share_sell
+  amount_usdc     String   @map("amount_usdc")   // positivo = entrada, negativo = saída (ou sempre positivo + type)
+  balance_after   String?  @map("balance_after")
+  reference_type  String?  @map("reference_type")   // video_share_pool | video_share_order | deposit_tx | withdrawal
+  reference_id    String?  @map("reference_id")    // video_id, order_id, tx_hash
+  tx_hash         String?  @map("tx_hash")          // para depósito (entrada USDC) ou retirada (saída USDC)
+  created_at      DateTime @default(now()) @map("created_at")
+  @@index([wallet])
+  @@index([wallet, created_at])
+  @@map("credit_transactions")
 }
 
 // Criador com Google/YouTube verificado — só pode usar paywall quem provar ser dono do vídeo
@@ -154,10 +342,16 @@ model Video {
   thumbnail_url      String?       @map("thumbnail_url")
   paywall_enabled    Boolean       @default(false) @map("paywall_enabled")
   paywall_price_usdc String?       @map("paywall_price_usdc")
+  delisted_at        DateTime?     @map("delisted_at")   // quando o criador tirou o vídeo do ar (seguro/rateio)
   created_at         DateTime      @default(now()) @map("created_at")
   updated_at         DateTime      @updatedAt @map("updated_at")
-  creator            Creator       @relation(fields: [creator_id], references: [id], onDelete: Cascade)
+  creator            Creator         @relation(fields: [creator_id], references: [id], onDelete: Cascade)
   unlocks            VideoUnlock[]
+  quotation          VideoQuotation?
+  mini_site_videos   MiniSiteVideo[]
+  share_holdings     VideoShareHolding[]
+  share_orders       VideoShareOrder[]
+  revenue_events     VideoRevenueEvent[]
   @@map("videos")
 }
 

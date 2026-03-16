@@ -9,17 +9,18 @@ export async function PATCH(
   const prisma = getPrisma();
   if (!prisma) return NextResponse.json({ error: "Prisma not configured" }, { status: 503 });
   const { id } = await params;
-  const body = (await request.json()) as { title?: string; content?: string };
+  const body = (await request.json()) as { title?: string; content?: string; image_url?: string };
   const data: Record<string, unknown> = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.content !== undefined) data.content = body.content;
+  if (body.image_url !== undefined) data.image_url = body.image_url?.trim() || null;
   if (Object.keys(data).length === 0) {
     const current = await prisma.idea.findUnique({ where: { id } });
     return NextResponse.json(current);
   }
   const updated = await prisma.idea.update({
     where: { id },
-    data: data as { title?: string; content?: string },
+    data: data as { title?: string; content?: string; image_url?: string | null },
   });
   return NextResponse.json(updated);
 }

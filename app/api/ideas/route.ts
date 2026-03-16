@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const prisma = getPrisma();
   if (!prisma) return NextResponse.json({ error: "Prisma not configured" }, { status: 503 });
-  const body = (await request.json()) as { mini_site_id: string; title?: string; content?: string };
+  const body = (await request.json()) as { mini_site_id: string; title?: string; content?: string; image_url?: string };
   if (!body.mini_site_id) return NextResponse.json({ error: "mini_site_id required" }, { status: 400 });
 
   const idea = await prisma.idea.create({
@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       mini_site_id: body.mini_site_id,
       title: body.title ?? null,
       content: body.content ?? null,
+      image_url: body.image_url?.trim() || null,
     },
   });
   return NextResponse.json(idea);

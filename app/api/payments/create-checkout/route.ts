@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
 import Stripe from "stripe";
 
-const PAYMENT_TYPES = ["VIDEO_UNLOCK", "SLUG_PURCHASE", "MINISITE_SUBSCRIPTION", "OTHER"] as const;
+const PAYMENT_TYPES = ["VIDEO_UNLOCK", "SLUG_PURCHASE", "SLUG_CLAIM", "MINISITE_SUBSCRIPTION", "OTHER", "CART"] as const;
+
+type CartItemPayload = { type: string; reference_id: string; label: string; amount_usdc: string };
 
 /**
  * POST /api/payments/create-checkout
- * Body: { type: VIDEO_UNLOCK | ..., reference_id: string, success_url?: string, cancel_url?: string, customer_email?: string }
- * Cria sessão Stripe Checkout (pagamento com cartão). Valor em USDC é cobrado em USD (1:1).
- * Após pagamento aprovado, o webhook libera acesso e o valor é repassado em USDC ao beneficiário.
+ * Body (single): { type, reference_id, success_url?, cancel_url?, customer_email? }
+ * Body (cart): { items: [{ type, reference_id, label, amount_usdc }, ...], success_url?, cancel_url?, customer_email? }
+ * Cria sessão Stripe Checkout. Cart = um pagamento único com vários itens; webhook processa cada item.
  */
 export async function POST(request: NextRequest) {
   const prisma = getPrisma();
@@ -20,21 +22,65 @@ export async function POST(request: NextRequest) {
   }
 
   const stripe = new Stripe(secret);
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
   try {
     const body = (await request.json()) as {
       type?: string;
       reference_id?: string;
+      items?: CartItemPayload[];
       success_url?: string;
       cancel_url?: string;
       customer_email?: string;
     };
-    const { type, reference_id, success_url, cancel_url, customer_email } = body;
+    const { items: cartItems, success_url, cancel_url, customer_email } = body;
 
+    if (cartItems && Array.isArray(cartItems) && cartItems.length > 0) {
+      const amountCentsTotal = cartItems.reduce((sum, it) => {
+        const n = parseFloat(it.amount_usdc || "0");
+        return sum + (isNaN(n) ? 0 : Math.round(n * 100));
+      }, 0);
+      if (amountCentsTotal <= 0) {
+        return NextResponse.json({ error: "invalid_cart", message: "Cart total must be > 0." }, { status: 400 });
+      }
+      const lineItems = cartItems.map((it) => ({
+        price_data: {
+          currency: "usd" as const,
+          product_data: {
+            name: it.label || `${it.type}: ${it.reference_id}`,
+            description: `TrustBank — ${it.type}`,
+          },
+          unit_amount: Math.round((parseFloat(it.amount_usdc) || 0) * 100),
+        },
+        quantity: 1 as const,
+      }));
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: lineItems,
+        mode: "payment",
+        success_url: success_url || `${baseUrl}/cart?success=1`,
+        cancel_url: cancel_url || `${baseUrl}/cart`,
+        customer_email: customer_email || undefined,
+        metadata: {
+          type: "CART",
+          reference_id: "",
+          amount_usdc: (amountCentsTotal / 100).toFixed(2),
+          cart: JSON.stringify(cartItems),
+        },
+      });
+      return NextResponse.json({
+        url: session.url,
+        session_id: session.id,
+        amount_usdc: (amountCentsTotal / 100).toFixed(2),
+        message: "Redirect user to url to pay. Webhook will process each cart item.",
+      });
+    }
+
+    const type = body.type;
+    const reference_id = body.reference_id;
     if (!type || !PAYMENT_TYPES.includes(type as (typeof PAYMENT_TYPES)[number])) {
       return NextResponse.json(
-        { error: "invalid_type", message: "type deve ser: VIDEO_UNLOCK | SLUG_PURCHASE | MINISITE_SUBSCRIPTION | OTHER" },
+        { error: "invalid_type", message: "type or items[] required." },
         { status: 400 }
       );
     }
@@ -68,15 +114,31 @@ export async function POST(request: NextRequest) {
       amountUsdc = isAuctionEnded && listing.current_bid_usdc ? listing.current_bid_usdc : listing.price_usdc;
       const slugLabel = listing.mini_site?.slug ?? listing.slug_value ?? reference_id;
       label = `Slug: ${slugLabel}`;
+    } else if (type === "SLUG_CLAIM") {
+      const { STANDALONE_SLUG_PRICE_USD } = await import("@/lib/payment-config");
+      const slug = reference_id.replace(/^\@/, "").toLowerCase();
+      if (!/^[a-z0-9_-]+$/i.test(slug)) {
+        return NextResponse.json({ error: "invalid_slug" }, { status: 400 });
+      }
+      const existing = await prisma.miniSite.findUnique({ where: { slug } });
+      const listing = await prisma.slugListing.findFirst({
+        where: { status: "active", OR: [{ slug_value: slug }, { slug_value: `@${slug}` }] },
+      });
+      if (existing || listing) {
+        return NextResponse.json({ error: "slug_no_longer_available" }, { status: 404 });
+      }
+      amountUsdc = STANDALONE_SLUG_PRICE_USD;
+      label = `Claim slug: ${slug}`;
     } else if (type === "MINISITE_SUBSCRIPTION") {
+      const { MINISITE_MONTHLY_USD } = await import("@/lib/payment-config");
       const site = await prisma.miniSite.findUnique({
         where: { id: reference_id },
         select: { slug: true, site_name: true, monthly_price_usdc: true },
       });
-      if (!site?.monthly_price_usdc) {
-        return NextResponse.json({ error: "minisite_no_monthly_plan" }, { status: 400 });
+      if (!site) {
+        return NextResponse.json({ error: "minisite_not_found" }, { status: 404 });
       }
-      amountUsdc = site.monthly_price_usdc;
+      amountUsdc = site.monthly_price_usdc?.trim() || MINISITE_MONTHLY_USD;
       label = `Mensalidade: ${site.slug || site.site_name || reference_id}`;
     }
 
@@ -102,7 +164,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: "payment",
-      success_url: success_url || (type === "SLUG_PURCHASE" ? `${baseUrl}/market/${reference_id}?paid=1` : `${baseUrl}/v/${reference_id}?paid=1`),
+      success_url: success_url || (type === "SLUG_CLAIM" ? `${baseUrl}/s/${reference_id}?claimed=1` : type === "SLUG_PURCHASE" ? `${baseUrl}/market/${reference_id}?paid=1` : `${baseUrl}/v/${reference_id}?paid=1`),
       cancel_url: cancel_url || baseUrl,
       customer_email: customer_email || undefined,
       metadata: {

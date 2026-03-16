@@ -39,11 +39,11 @@ async function getOAuthClient(redirectUri?: string) {
   return new google.auth.OAuth2(keys.clientId, keys.clientSecret, redirect);
 }
 
-/** URL para redirecionar o usuário ao login Google (escopo YouTube). */
-export async function getGoogleAuthUrl(redirectUri?: string): Promise<string | null> {
+/** URL para redirecionar o usuário ao login Google (escopo YouTube). state = return path after login (e.g. /site/edit). */
+export async function getGoogleAuthUrl(redirectUri?: string, state?: string): Promise<string | null> {
   const client = await getOAuthClient(redirectUri);
   if (!client) return null;
-  return client.generateAuthUrl({
+  const options: { access_type: string; prompt: string; scope: string[]; state?: string } = {
     access_type: "offline",
     prompt: "consent",
     scope: [
@@ -51,7 +51,9 @@ export async function getGoogleAuthUrl(redirectUri?: string): Promise<string | n
       "https://www.googleapis.com/auth/userinfo.profile",
       "https://www.googleapis.com/auth/youtube.readonly",
     ],
-  });
+  };
+  if (state && state.startsWith("/") && !state.includes("//")) options.state = state;
+  return client.generateAuthUrl(options);
 }
 
 /** Troca o code (callback) por tokens. */

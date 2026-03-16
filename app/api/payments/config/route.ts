@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
-import { getPlatformWallet } from "@/lib/payment-config";
+import { getPlatformWallet, MINISITE_MONTHLY_USD } from "@/lib/payment-config";
 
 /**
  * GET /api/payments/config
@@ -54,15 +54,38 @@ export async function GET(request: Request) {
       isAuctionEnded && listing.current_bid_usdc ? listing.current_bid_usdc : listing.price_usdc;
     const slugLabel = listing.mini_site?.slug ?? listing.slug_value ?? referenceId;
     label = `Slug: ${slugLabel}`;
+  } else if (type === "SLUG_CLAIM") {
+    const { getSlugClaimTier } = await import("@/lib/slug-reserved");
+    const { getSlugOverridesFromDb } = await import("@/lib/slug-settings");
+    const slug = referenceId.replace(/^\@/, "").toLowerCase();
+    if (!/^[a-z0-9_-]+$/i.test(slug)) {
+      return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
+    }
+    const overrides = await getSlugOverridesFromDb();
+    const tier = getSlugClaimTier(slug, overrides);
+    if (tier.tier === "blocked") {
+      return NextResponse.json({ error: tier.message || "Slug reserved" }, { status: 400 });
+    }
+    const existing = await prisma.miniSite.findFirst({
+      where: { OR: [{ slug }, { slug: `@${slug}` }] },
+    });
+    const listing = await prisma.slugListing.findFirst({
+      where: { status: "active", OR: [{ slug_value: slug }, { slug_value: `@${slug}` }] },
+    });
+    if (existing || listing) {
+      return NextResponse.json({ error: "Slug no longer available" }, { status: 404 });
+    }
+    amount_usdc = tier.amount_usdc;
+    label = `Claim slug: ${slug}`;
   } else if (type === "MINISITE_SUBSCRIPTION") {
     const site = await prisma.miniSite.findUnique({
       where: { id: referenceId },
       select: { site_name: true, slug: true, monthly_price_usdc: true },
     });
-    if (!site?.monthly_price_usdc) {
-      return NextResponse.json({ error: "Mini site sem plano mensal" }, { status: 404 });
+    if (!site) {
+      return NextResponse.json({ error: "Mini site não encontrado" }, { status: 404 });
     }
-    amount_usdc = site.monthly_price_usdc;
+    amount_usdc = site.monthly_price_usdc?.trim() || MINISITE_MONTHLY_USD;
     label = `Mensalidade: ${site.slug || site.site_name || referenceId}`;
   } else {
     return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
