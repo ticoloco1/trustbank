@@ -56,6 +56,14 @@ export async function PATCH(
     subscription_plan?: string;
     monthly_price_usdc?: string;
     next_billing_at?: string | null;
+    cv_contact_email?: string | null;
+    cv_contact_phone?: string | null;
+    cv_contact_whatsapp?: string | null;
+    presentation_youtube_id?: string | null;
+    show_cv_expandable?: boolean | null;
+    site_paywall_enabled?: boolean | null;
+    donation_button_enabled?: boolean | null;
+    module_order?: string[] | null;
   };
 
   const data: Record<string, unknown> = {};
@@ -87,6 +95,14 @@ export async function PATCH(
   if (body.subscription_plan !== undefined) data.subscription_plan = body.subscription_plan;
   if (body.monthly_price_usdc !== undefined) data.monthly_price_usdc = body.monthly_price_usdc;
   if (body.next_billing_at !== undefined) data.next_billing_at = body.next_billing_at ? new Date(body.next_billing_at) : null;
+  if (body.cv_contact_email !== undefined) data.cv_contact_email = body.cv_contact_email;
+  if (body.cv_contact_phone !== undefined) data.cv_contact_phone = body.cv_contact_phone;
+  if (body.cv_contact_whatsapp !== undefined) data.cv_contact_whatsapp = body.cv_contact_whatsapp;
+  if (body.presentation_youtube_id !== undefined) data.presentation_youtube_id = body.presentation_youtube_id;
+  if (body.show_cv_expandable !== undefined) data.show_cv_expandable = body.show_cv_expandable;
+  if (body.site_paywall_enabled !== undefined) data.site_paywall_enabled = body.site_paywall_enabled;
+  if (body.donation_button_enabled !== undefined) data.donation_button_enabled = body.donation_button_enabled;
+  if (body.module_order !== undefined) data.module_order = Array.isArray(body.module_order) ? body.module_order : null;
 
   if (Object.keys(data).length === 0) {
     const current = await prisma.miniSite.findUnique({ where: { id } });

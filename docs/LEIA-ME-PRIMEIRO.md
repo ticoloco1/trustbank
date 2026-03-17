@@ -39,6 +39,8 @@ Se o GitHub pedir senha, use um **Personal Access Token** (GitHub → Settings �
 
 **Inventário e checklist (últimos 5 dias):** leia **docs/TRABALHO-5-DIAS-INVENTARIO-E-CHECKLIST.md** — tudo que foi criado/alterado e o que conferir no deploy.
 
+**Entender onde está cada coisa (TrustSEO, prime-fin-dash, royal-fintech-hub):** leia **docs/MAPA-TRUSTSEO-E-PRIME-FIN-DASH.md** — qual projeto é o principal, quando usar o microserviço TrustSEO e o que é só referência.
+
 **TrustBank 100% Prisma (só terminal, sem Supabase):** leia **docs/SO-TERMINAL-TRUSTBANK-PRISMA.md** — passo a passo só no terminal.
 
 **Se o trustbank.xyz não mostra as mudanças ou não salva o mini site:** leia **docs/TRUSTBANK-XYZ-ESTE-PROJETO.md** (Vercel Root Directory, Redeploy e Supabase).

@@ -44,6 +44,14 @@ type MiniSite = {
   next_billing_at: string | null;
   ideas: Idea[];
   mini_site_videos?: { video: { id: string; youtube_id: string; title: string | null; thumbnail_url: string | null; quotation?: { total_shares: number; valuation_usdc: string | null; ticker_symbol: string | null; revenue_usdc: string | null } | null } }[];
+  cv_contact_email?: string | null;
+  cv_contact_phone?: string | null;
+  cv_contact_whatsapp?: string | null;
+  presentation_youtube_id?: string | null;
+  show_cv_expandable?: boolean | null;
+  site_paywall_enabled?: boolean | null;
+  donation_button_enabled?: boolean | null;
+  module_order?: string[] | null;
 };
 
 export default function EditMiniSitePage() {
@@ -371,39 +379,42 @@ export default function EditMiniSitePage() {
     return { ...base, ...patch } as MiniSite;
   };
 
+  const previewSlug = formData.slug ?? "";
+
   return (
-    <main style={{ padding: "2rem", fontFamily: "system-ui", maxWidth: 720, margin: "0 auto" }}>
+    <main style={{ padding: "1rem 1.5rem", fontFamily: "system-ui", minHeight: "100vh", background: "#f1f5f9" }}>
       <div style={{ marginBottom: "1rem" }}>
-        <Link href="/dashboard" style={{ color: "#666", textDecoration: "none" }}>← Mini sites</Link>
+        <Link href="/dashboard" style={{ color: "#475569", textDecoration: "none", fontSize: "0.9rem" }}>← Mini sites</Link>
       </div>
-      <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "1.35rem", marginBottom: "1rem" }}>
         Edit: {formData.site_name || formData.slug || id.slice(0, 8)}
         {isAdmin && <span style={{ fontSize: "0.65rem", fontWeight: 600, background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.5rem", borderRadius: 4 }}>ADMIN</span>}
       </h1>
 
-      <div key={id}>
-      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f6f6f6", borderRadius: 8 }}>
-        <h2 style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>Mini site details</h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      {/* Layout 2 colunas: esquerda = config (scroll), direita = preview fixo */}
+      <div className="dashboard-minisite-grid">
+        <div key={id} style={{ display: "flex", flexDirection: "column", gap: "1rem", minWidth: 0 }}>
+      <section style={{ padding: "1.25rem", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.75rem", color: "#1e293b" }}>PERFIL</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
             <input
-            placeholder="Name"
+            placeholder="Nome / Display name"
             value={formData.site_name ?? ""}
             onChange={(e) => setEdit((prev) => mergeEdit(prev, { site_name: e.target.value }))}
-            style={{ padding: "0.5rem" }}
+            style={{ padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8 }}
           />
           <input
-            placeholder="Slug"
+            placeholder="Slug (URL: /s/[slug])"
             value={formData.slug ?? ""}
             onChange={(e) => setEdit((prev) => mergeEdit(prev, { slug: e.target.value }))}
-            style={{ padding: "0.5rem" }}
+            style={{ padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8 }}
           />
-          <textarea
-            placeholder="Bio"
-            value={formData.bio ?? ""}
-            onChange={(e) => setEdit((prev) => mergeEdit(prev, { bio: e.target.value }))}
-            rows={2}
-            style={{ padding: "0.5rem" }}
-          />
+          <div>
+            <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.35rem", color: "#64748b" }}>Bio — editor completo</label>
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", minHeight: 120 }}>
+              <RichTextEditor value={formData.bio ?? ""} onChange={(html) => setEdit((prev) => mergeEdit(prev, { bio: html }))} placeholder="Conte sobre você..." minHeight={100} />
+            </div>
+          </div>
           <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Template</label>
             <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
@@ -491,8 +502,77 @@ export default function EditMiniSitePage() {
               >
                 Premium Fintech (moderno)
               </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "profile" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "profile" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "profile" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Profile (Linktree)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "netflix" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "netflix" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "netflix" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                Netflix (grid vídeos)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEdit((prev) => mergeEdit(prev, { template: "cv_pro" }))}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 6,
+                  border: (formData.template ?? "default") === "cv_pro" ? "2px solid #6366f1" : "1px solid #ccc",
+                  background: (formData.template ?? "default") === "cv_pro" ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                }}
+              >
+                CV Pro (LinkedIn + cadeado)
+              </button>
             </div>
           </div>
+          {(formData.template ?? "") === "cv_pro" && (
+            <div style={{ marginTop: "1rem", padding: "1rem", background: "rgba(10,102,194,0.06)", borderRadius: 8, border: "1px solid rgba(10,102,194,0.2)" }}>
+              <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>Contato protegido (CV Pro)</h3>
+              <p style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.75rem" }}>E-mail, telefone e WhatsApp ficam ocultos até uma empresa desbloquear (pago). Só aparecem aqui para você editar.</p>
+              <input
+                type="email"
+                placeholder="E-mail profissional"
+                value={formData.cv_contact_email ?? ""}
+                onChange={(e) => setEdit((prev) => mergeEdit(prev, { cv_contact_email: e.target.value || null }))}
+                style={{ padding: "0.5rem", marginBottom: "0.5rem", width: "100%", maxWidth: 320 }}
+              />
+              <input
+                type="tel"
+                placeholder="Telefone (ex: +5511999998888)"
+                value={formData.cv_contact_phone ?? ""}
+                onChange={(e) => setEdit((prev) => mergeEdit(prev, { cv_contact_phone: e.target.value || null }))}
+                style={{ padding: "0.5rem", marginBottom: "0.5rem", width: "100%", maxWidth: 320 }}
+              />
+              <input
+                type="text"
+                placeholder="WhatsApp (número com DDI)"
+                value={formData.cv_contact_whatsapp ?? ""}
+                onChange={(e) => setEdit((prev) => mergeEdit(prev, { cv_contact_whatsapp: e.target.value || null }))}
+                style={{ padding: "0.5rem", width: "100%", maxWidth: 320 }}
+              />
+            </div>
+          )}
           <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Layout (columns)</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -504,6 +584,50 @@ export default function EditMiniSitePage() {
               ))}
             </div>
           </div>
+          <section style={{ padding: "1rem", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+            <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>VÍDEO DE APRESENTAÇÃO</h3>
+            <p style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.5rem" }}>Cole um link do YouTube para exibir no seu site. Só embed de YouTube.</p>
+            <input
+              placeholder="https://youtube.com/watch?v=..."
+              value={formData.presentation_youtube_id ?? ""}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                const id = v.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1] || v;
+                setEdit((prev) => mergeEdit(prev, { presentation_youtube_id: id || null }));
+              }}
+              style={{ padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8, width: "100%", maxWidth: 400 }}
+            />
+          </section>
+          <section style={{ padding: "1rem", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+            <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>VIDEO LAYOUT</h3>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              {([1, 2, 3] as const).map((cols) => (
+                <button key={cols} type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { layout_columns: cols }))}
+                  style={{ padding: "0.5rem 0.75rem", borderRadius: 6, border: (formData.layout_columns ?? 1) === cols ? "2px solid #0d9488" : "1px solid #e2e8f0", background: (formData.layout_columns ?? 1) === cols ? "#ccfbf1" : "#f8fafc", cursor: "pointer" }}>
+                  {cols} coluna{cols > 1 ? "s" : ""}
+                </button>
+              ))}
+            </div>
+          </section>
+          <section style={{ padding: "1rem", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+            <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>CV / RESUME & CONTACT</h3>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.9rem" }}>Mostrar CV expansível</span>
+              <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { show_cv_expandable: !(formData.show_cv_expandable ?? false) }))} style={{ width: 44, height: 24, borderRadius: 12, background: formData.show_cv_expandable ? "#0d9488" : "#cbd5e1", border: 0, cursor: "pointer", position: "relative" }} aria-label="Toggle"><span style={{ position: "absolute", left: formData.show_cv_expandable ? 22 : 2, top: 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} /></button>
+            </div>
+          </section>
+          <section style={{ padding: "1rem", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+            <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>PAYWALL DO SITE (ONLYFANS-STYLE)</h3>
+            <p style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.5rem" }}>Ative para cobrar acesso. Visitantes verão apenas o banner até pagar.</p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+              <span style={{ fontSize: "0.9rem" }}>Ativar paywall do site</span>
+              <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { site_paywall_enabled: !(formData.site_paywall_enabled ?? false) }))} style={{ width: 44, height: 24, borderRadius: 12, background: formData.site_paywall_enabled ? "#6366f1" : "#cbd5e1", border: 0, cursor: "pointer", position: "relative" }} aria-label="Toggle"><span style={{ position: "absolute", left: formData.site_paywall_enabled ? 22 : 2, top: 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} /></button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.9rem" }}>Botão de doação</span>
+              <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { donation_button_enabled: !(formData.donation_button_enabled ?? false) }))} style={{ width: 44, height: 24, borderRadius: 12, background: formData.donation_button_enabled ? "#6366f1" : "#cbd5e1", border: 0, cursor: "pointer", position: "relative" }} aria-label="Toggle"><span style={{ position: "absolute", left: formData.donation_button_enabled ? 22 : 2, top: 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} /></button>
+            </div>
+          </section>
           <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Theme & colors</label>
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
@@ -567,70 +691,33 @@ export default function EditMiniSitePage() {
               />
             </div>
           )}
-          <section style={{ marginTop: "1.5rem", padding: "1.25rem", background: "#fff", border: "2px solid #0d9488", borderRadius: 12 }}>
-            <h3 style={{ fontSize: "1rem", margin: "0 0 1rem", color: "#0d9488" }}>📷 Upload de imagens</h3>
-            <p style={{ fontSize: "0.85rem", color: "#555", marginBottom: "1rem" }}>Envie fotos (até 4 MB) ou cole URL. Cada botão preenche o campo ao lado.</p>
+          <section style={{ marginTop: "1rem", padding: "1.25rem", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12 }}>
+            <h3 style={{ fontSize: "0.95rem", margin: "0 0 0.75rem", color: "#166534" }}>📷 Imagens — só upload (sem links)</h3>
           <div>
-            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Banner / capa (estilo X)</label>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-              <input placeholder="Banner URL (ex: https://...)" value={formData.banner_url ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { banner_url: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 200 }} />
-              <ImageUpload prefix={`${id}-banner`} label="Enviar imagem" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { banner_url: url }))} />
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Banner / capa</label>
+            <ImageUpload prefix={`${id}-banner`} label="Enviar banner" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { banner_url: url }))} />
+            {formData.banner_url && <img src={formData.banner_url} alt="" style={{ marginTop: "0.5rem", maxWidth: "100%", height: 80, objectFit: "cover", borderRadius: 8 }} />}
+          </div>
+          <div style={{ marginTop: "1rem" }}>
+            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Foto de perfil (e feed 1–4)</label>
+            <p style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "0.5rem" }}>Foto 1 = avatar no preview.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              <ImageUpload prefix={`${id}-feed`} label="Foto 1" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_1: url }))} />
+              <ImageUpload prefix={`${id}-feed`} label="Foto 2" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_2: url }))} />
+              <ImageUpload prefix={`${id}-feed`} label="Foto 3" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_3: url }))} />
+              <ImageUpload prefix={`${id}-feed`} label="Foto 4" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_4: url }))} />
             </div>
           </div>
           <div style={{ marginTop: "1rem" }}>
-            <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Feed — 4 fotos (URL ou upload)</label>
-            <p style={{ fontSize: "0.8rem", color: "#666", marginBottom: "0.5rem" }}>Foto 1 também aparece como avatar.</p>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.35rem" }}>
-              <input placeholder="Foto 1 URL" value={formData.feed_image_1 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_1: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
-              <ImageUpload prefix={`${id}-feed`} label="Upload 1" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_1: url }))} />
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.35rem" }}>
-              <input placeholder="Foto 2 URL" value={formData.feed_image_2 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_2: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
-              <ImageUpload prefix={`${id}-feed`} label="Upload 2" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_2: url }))} />
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.35rem" }}>
-              <input placeholder="Foto 3 URL" value={formData.feed_image_3 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_3: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
-              <ImageUpload prefix={`${id}-feed`} label="Upload 3" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_3: url }))} />
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-              <input placeholder="Foto 4 URL" value={formData.feed_image_4 ?? ""} onChange={(e) => setEdit((prev) => mergeEdit(prev, { feed_image_4: e.target.value || null }))} style={{ padding: "0.5rem", flex: 1, minWidth: 160 }} />
-              <ImageUpload prefix={`${id}-feed`} label="Upload 4" onUpload={(url) => setEdit((prev) => mergeEdit(prev, { feed_image_4: url }))} />
-            </div>
-          </div>
-          <div>
             <label style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.9rem" }}>Galeria</label>
-            <p style={{ fontSize: "0.8rem", color: "#666", marginBottom: "0.5rem" }}>URL e legenda (opcional) ou envie imagem para adicionar.</p>
-            <div style={{ marginBottom: "0.5rem" }}>
-              <ImageUpload prefix={`${id}-gallery`} label="+ Enviar e adicionar à galeria" onUpload={(url) => setEdit((prev) => { const base = prev && prev.id === id ? prev : site; const list = Array.isArray(base.gallery_images) ? base.gallery_images : []; return mergeEdit(prev, { gallery_images: [...list, { url, caption: "" }] }); })} />
-            </div>
+            <ImageUpload prefix={`${id}-gallery`} label="+ Enviar e adicionar à galeria" onUpload={(url) => setEdit((prev) => { const base = prev && prev.id === id ? prev : site; const list = Array.isArray(base.gallery_images) ? base.gallery_images : []; return mergeEdit(prev, { gallery_images: [...list, { url, caption: "" }] }); })} />
             {(Array.isArray(formData.gallery_images) ? formData.gallery_images : []).map((item, idx) => (
-              <div key={idx} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-                <input
-                  placeholder="URL da imagem"
-                  value={item.url}
-                  onChange={(e) => {
-                    const base = formData.id === id ? formData : site;
-                    const next = [...(base.gallery_images || [])];
-                    next[idx] = { ...next[idx], url: e.target.value };
-                    setEdit((prev) => mergeEdit(prev, { gallery_images: next }));
-                  }}
-                  style={{ padding: "0.5rem", flex: 1, minWidth: 180 }}
-                />
-                <input
-                  placeholder="Legenda"
-                  value={item.caption ?? ""}
-                  onChange={(e) => {
-                    const base = formData.id === id ? formData : site;
-                    const next = [...(base.gallery_images || [])];
-                    next[idx] = { ...next[idx], caption: e.target.value || undefined };
-                    setEdit((prev) => mergeEdit(prev, { gallery_images: next }));
-                  }}
-                  style={{ padding: "0.5rem", width: "12rem" }}
-                />
-                <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { gallery_images: (formData.gallery_images || []).filter((_, i) => i !== idx) }))} style={{ padding: "0.5rem", background: "#dc2626", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer" }}>Remover</button>
+              <div key={idx} style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                {item.url && <img src={item.url} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6 }} />}
+                <input placeholder="Legenda" value={item.caption ?? ""} onChange={(e) => { const base = formData.id === id ? formData : site; const next = [...(base.gallery_images || [])]; next[idx] = { ...next[idx], caption: e.target.value || undefined }; setEdit((prev) => mergeEdit(prev, { gallery_images: next })); }} style={{ padding: "0.35rem 0.5rem", flex: 1, minWidth: 120, border: "1px solid #e2e8f0", borderRadius: 6 }} />
+                <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { gallery_images: (formData.gallery_images || []).filter((_, i) => i !== idx) }))} style={{ padding: "0.35rem 0.6rem", background: "#dc2626", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", fontSize: "0.85rem" }}>Remover</button>
               </div>
             ))}
-            <button type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { gallery_images: [...(formData.gallery_images || []), { url: "", caption: "" }] }))} style={{ padding: "0.4rem 0.75rem", background: "#22c55e", color: "#fff", border: 0, borderRadius: 4, cursor: "pointer", fontSize: "0.9rem" }}>+ Adicionar à galeria</button>
           </div>
           </section>
           <div>
@@ -837,40 +924,37 @@ export default function EditMiniSitePage() {
         </form>
       </section>
 
-      <section style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Ideas</h2>
+      <section style={{ marginBottom: "1.5rem", padding: "1.25rem", background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
+        <h2 style={{ fontSize: "0.95rem", marginBottom: "0.75rem" }}>LINKS &amp; POSTS (Feed)</h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             if (ideaForm.title || ideaForm.content || ideaForm.image_url) addIdeaMutation.mutate(ideaForm);
           }}
-          style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1rem" }}
+          style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}
         >
           <input
-            placeholder="Idea / post title"
+            placeholder="Título do link ou post"
             value={ideaForm.title}
             onChange={(e) => setIdeaForm((f) => ({ ...f, title: e.target.value }))}
-            style={{ padding: "0.5rem" }}
+            style={{ padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8 }}
           />
-          <textarea
-            placeholder="Content"
-            value={ideaForm.content}
-            onChange={(e) => setIdeaForm((f) => ({ ...f, content: e.target.value }))}
-            rows={2}
-            style={{ padding: "0.5rem" }}
-          />
-          <input
-            placeholder="Image URL (optional)"
-            value={ideaForm.image_url}
-            onChange={(e) => setIdeaForm((f) => ({ ...f, image_url: e.target.value }))}
-            style={{ padding: "0.5rem" }}
-          />
+          <div>
+            <label style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "0.25rem", display: "block" }}>Conteúdo — editor completo</label>
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, minHeight: 100 }}>
+              <RichTextEditor value={ideaForm.content} onChange={(html) => setIdeaForm((f) => ({ ...f, content: html }))} placeholder="Texto ou URL do link..." minHeight={80} />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "0.25rem", display: "block" }}>Imagem — só upload (sem link)</label>
+            <ImageUpload prefix={`${id}-idea`} label="Enviar imagem" onUpload={(url) => setIdeaForm((f) => ({ ...f, image_url: url }))} />
+          </div>
           <button
             type="submit"
             disabled={addIdeaMutation.isPending}
-            style={{ padding: "0.5rem 1rem", background: "#333", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}
+            style={{ padding: "0.5rem 1rem", background: "#333", color: "#fff", border: 0, borderRadius: 8, cursor: "pointer", alignSelf: "flex-start" }}
           >
-            Add idea / post
+            Adicionar link / post
           </button>
         </form>
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -1028,7 +1112,7 @@ export default function EditMiniSitePage() {
       </section>
 
       {site.slug && (
-        <p>
+        <p style={{ marginBottom: "1rem" }}>
           <Link href={`/s/${site.slug}`} style={{ color: "#0066cc" }}>Ver mini site →</Link>
           {site.slug.startsWith("@") && (
             <span style={{ marginLeft: "0.5rem", color: "#1e3a8a", fontWeight: 600 }}>trustbank.xyz/{site.slug}</span>
@@ -1095,13 +1179,32 @@ export default function EditMiniSitePage() {
       </section>
 
       {formData.monthly_price_usdc && parseFloat(formData.monthly_price_usdc) > 0 && (
-        <section style={{ marginTop: "2rem", padding: "1rem", background: "#f0fdf4", borderRadius: 8, border: "1px solid #86efac" }}>
+        <section style={{ marginTop: "1rem", padding: "1rem", background: "#f0fdf4", borderRadius: 8, border: "1px solid #86efac" }}>
           <h2 style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>Pay subscription</h2>
           <p style={{ fontSize: "0.9rem", color: "#166534", marginBottom: "0.5rem" }}>
             Amount: <strong>{formData.monthly_price_usdc} USDC</strong>/month. Get destination and amount from <strong>GET /api/payments/config?type=MINISITE_SUBSCRIPTION&amp;reference_id={site.id}</strong>, pay in USDC, then call <strong>POST /api/payments/verify</strong> with type=MINISITE_SUBSCRIPTION, reference_id={site.id} and tx_hash.
           </p>
         </section>
       )}
+        </div>
+
+        {/* Coluna direita: preview fixo */}
+        <aside className="dashboard-preview-col" style={{ position: "sticky", top: "1rem", background: "#fff", borderRadius: 12, padding: "1.25rem", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", minHeight: 200 }}>
+          <h3 style={{ fontSize: "0.9rem", marginBottom: "0.75rem", color: "#64748b" }}>Preview</h3>
+          <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
+            {formData.feed_image_1 ? (
+              <img src={formData.feed_image_1} alt="" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", margin: "0 auto" }} />
+            ) : (
+              <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#e2e8f0", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: "1.5rem" }}>?</div>
+            )}
+            <p style={{ margin: "0.5rem 0 0", fontWeight: 600, fontSize: "1rem" }}>{formData.site_name || "Seu Nome"}</p>
+            {formData.bio && (() => { const t = String(formData.bio).replace(/<[^>]+>/g, ""); return <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#64748b", lineHeight: 1.4, maxHeight: 48, overflow: "hidden", textOverflow: "ellipsis" }}>{t.slice(0, 80)}{t.length > 80 ? "…" : ""}</p>; })()}
+            <p style={{ margin: "0.5rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>{previewSlug ? `trustbank.xyz/s/${previewSlug}` : "trustbank.xyz"}</p>
+          </div>
+          {previewSlug && (
+            <Link href={`/s/${previewSlug}`} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: "0.75rem", textAlign: "center", padding: "0.5rem", background: "#f1f5f9", borderRadius: 8, fontSize: "0.85rem", color: "#475569", textDecoration: "none" }}>Ver mini site →</Link>
+          )}
+        </aside>
       </div>
     </main>
   );

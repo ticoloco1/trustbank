@@ -76,6 +76,14 @@ model MiniSite {
   mini_site_videos     MiniSiteVideo[]
   club_nft_contract    String?  @map("club_nft_contract")   // NFT do clube — quem tem acessa a corretora
   club_nft_name        String?  @map("club_nft_name")       // ex: "TrustBank Investment Club"
+  cv_contact_email     String?  @map("cv_contact_email")   // CV_PRO: email (bloqueado até desbloqueio pago)
+  cv_contact_phone     String?  @map("cv_contact_phone")
+  cv_contact_whatsapp  String?  @map("cv_contact_whatsapp")
+  presentation_youtube_id String? @map("presentation_youtube_id") // vídeo de apresentação (só YouTube)
+  show_cv_expandable   Boolean? @default(false) @map("show_cv_expandable")
+  site_paywall_enabled Boolean? @default(false) @map("site_paywall_enabled")
+  donation_button_enabled Boolean? @default(false) @map("donation_button_enabled")
+  module_order        Json?    @map("module_order")       // ["feed","links","videos","video_apresentacao","pages","domains"]
   @@map("mini_sites")
 }
 

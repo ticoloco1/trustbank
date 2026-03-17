@@ -5,6 +5,9 @@ import InvestorTemplate from "./InvestorTemplate";
 import PremiumTemplate from "./PremiumTemplate";
 import PremiumDarkTemplate from "./PremiumDarkTemplate";
 import PremiumFintechTemplate from "./PremiumFintechTemplate";
+import ProfileTemplate from "./ProfileTemplate";
+import NetflixTemplate from "./NetflixTemplate";
+import CVProTemplate from "./CVProTemplate";
 import MiniSiteGoogleBanner from "./MiniSiteGoogleBanner";
 import AnalyticsTracker from "./AnalyticsTracker";
 import SafeImage from "./SafeImage";
@@ -19,6 +22,7 @@ type SiteWithRelations = Prisma.MiniSiteGetPayload<{
   include: {
     ideas: true;
     listed_domains: true;
+    extra_pages: true;
     mini_site_videos: { include: { video: { include: { quotation: true } } } };
   };
 }>;
@@ -134,6 +138,7 @@ export default async function MiniSitePage({ params }: Props) {
     include: {
       ideas: { orderBy: { created_at: "desc" } },
       listed_domains: { orderBy: [{ sort_order: "asc" }, { created_at: "asc" }] },
+      extra_pages: { orderBy: { sort_order: "asc" } },
       mini_site_videos: {
         orderBy: { sort_order: "asc" },
         include: { video: { include: { quotation: true } } },
@@ -301,6 +306,64 @@ export default async function MiniSitePage({ params }: Props) {
             gallery_images: site.gallery_images as { url: string; caption?: string }[] | null,
             ideas: site.ideas,
             listed_domains: site.listed_domains ?? [],
+          }}
+        />
+      </>
+    );
+  }
+
+  if (template === "profile") {
+    return (
+      <>
+        <AnalyticsTracker miniSiteId={site.id} path="/" />
+        <ProfileTemplate
+          site={{
+            site_name: site.site_name,
+            slug: site.slug,
+            bio: site.bio,
+            primary_color: site.primary_color,
+            theme: site.theme,
+            feed_image_1: site.feed_image_1,
+            ideas: site.ideas,
+          }}
+        />
+      </>
+    );
+  }
+
+  if (template === "netflix") {
+    return (
+      <>
+        <AnalyticsTracker miniSiteId={site.id} path="/" />
+        <NetflixTemplate
+          site={{
+            site_name: site.site_name,
+            slug: site.slug,
+            bio: site.bio,
+            banner_url: site.banner_url,
+            mini_site_videos: site.mini_site_videos ?? [],
+          }}
+        />
+      </>
+    );
+  }
+
+  if (template === "cv_pro") {
+    return (
+      <>
+        <AnalyticsTracker miniSiteId={site.id} path="/" />
+        <CVProTemplate
+          site={{
+            site_name: site.site_name,
+            slug: site.slug,
+            bio: site.bio,
+            primary_color: site.primary_color,
+            banner_url: site.banner_url,
+            feed_image_1: site.feed_image_1,
+            extra_pages: site.extra_pages ?? [],
+            cv_contact_email: (site as { cv_contact_email?: string | null }).cv_contact_email,
+            cv_contact_phone: (site as { cv_contact_phone?: string | null }).cv_contact_phone,
+            cv_contact_whatsapp: (site as { cv_contact_whatsapp?: string | null }).cv_contact_whatsapp,
           }}
         />
       </>

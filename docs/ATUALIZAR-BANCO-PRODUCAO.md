@@ -2,6 +2,8 @@
 
 Os erros **"column does not exist"** e **"table does not exist"** acontecem porque o Postgres em produção está com schema antigo. O código (Prisma) espera colunas e tabelas que ainda não existem no banco.
 
+**Desde que o script de build foi ajustado,** a cada deploy o Vercel roda `prisma db push` e o banco é atualizado sozinho. Ou seja: o “instala” que deixa o banco e o código juntos é o próprio deploy (desde que `DATABASE_URL` esteja configurada). Veja **docs/INSTALACAO-BANCO-E-ENV.md**.
+
 ## O que fazer
 
 1. **Abrir o Postgres de produção**
