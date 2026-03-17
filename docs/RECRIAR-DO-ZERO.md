@@ -6,6 +6,8 @@ Um único guia para ter **tudo** que existia desde o início, no mesmo repositó
 
 ## O que este projeto já tem (desde o início)
 
+**Resumo “para começar” vs “depois”:** veja **docs/O-QUE-TEM-PARA-COMECAR.md** (mini-site completo, vídeo paywall, CV, mapas/catálogo, slugs compra e venda = já tem; NFTs e video shares = depois).
+
 - **Home** — busca de slugs, carrinho, links (Dashboard, Slugs, Marketplace, Créditos)
 - **Slugs** — buscar/comprar `/@` e `/s`, verificar pagamento, criar mini-site
 - **Carrinho** — itens, checkout (USDC ou cartão)
