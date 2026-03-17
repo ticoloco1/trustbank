@@ -16,18 +16,62 @@ function shouldPrerenderCache(pathname: string): boolean {
   return false;
 }
 
-/** Normaliza path para chave do cache: /@slug → /s/@slug (mesmo conteúdo). */
+/** Normaliza path para chave do cache: /@slug → /s/slug (mesmo conteúdo). */
 function cacheKeyForPath(pathname: string): string {
-  if (pathname.startsWith("/@")) return "/s" + pathname;
+  if (pathname.startsWith("/@")) {
+    const m = pathname.match(/^\/@([^/]+)(\/.*)?$/);
+    return m ? `/s/${m[1]}${m[2] ?? ""}` : pathname;
+  }
   return pathname;
 }
 
+/** Rewrite /@slug e /@slug/... para /s/slug (mesmo conteúdo; URL do browser fica /@). */
+function rewriteAtPath(pathname: string): string | null {
+  const m = pathname.match(/^\/@([^/]+)(\/.*)?$/);
+  if (!m) return null;
+  const slug = m[1];
+  const rest = m[2] ?? "";
+  return `/s/${slug}${rest}`;
+}
+
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Redireciona /s/slug → /@slug para que a URL canônica seja sempre /@
+  const sMatch = pathname.match(/^\/s\/([^/]+)(\/.*)?$/);
+  if (sMatch) {
+    const slug = (sMatch[1] || "").replace(/^@/, "");
+    const rest = sMatch[2] ?? "";
+    const url = request.nextUrl.clone();
+    url.pathname = slug ? `/@${slug}${rest}` : pathname;
+    if (slug) return NextResponse.redirect(url, 301);
+  }
+
+  // Slugs só em /@ — reescreve para /s/ internamente (URL permanece /@slug)
+  const rewriteTo = rewriteAtPath(pathname);
+  if (rewriteTo) {
+    const isBot = /googlebot|bingbot|slurp|duckduckbot|facebookexternalhit|twitterbot|chatgpt-user|perplexitybot/i.test(request.headers.get("user-agent") ?? "");
+    if (isBot) {
+      try {
+        const { kv } = await import("@vercel/kv");
+        const html = await kv.get<string>(`prerender:${rewriteTo}`);
+        if (html && typeof html === "string") {
+          return new NextResponse(html, {
+            headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=3600, s-maxage=86400" },
+          });
+        }
+      } catch {
+        // segue para rewrite
+      }
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = rewriteTo;
+    return NextResponse.rewrite(url);
+  }
+
   try {
     const ua = request.headers.get("user-agent") ?? "";
     if (!BOT_UA.test(ua)) return NextResponse.next();
-
-    const pathname = request.nextUrl.pathname;
     if (!shouldPrerenderCache(pathname)) return NextResponse.next();
 
     const key = `prerender:${cacheKeyForPath(pathname)}`;

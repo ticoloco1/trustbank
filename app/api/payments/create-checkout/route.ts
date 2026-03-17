@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: "payment",
-      success_url: success_url || (type === "SLUG_CLAIM" ? `${baseUrl}/s/${reference_id}?claimed=1` : type === "SLUG_PURCHASE" ? `${baseUrl}/market/${reference_id}?paid=1` : `${baseUrl}/v/${reference_id}?paid=1`),
+      success_url: success_url || (type === "SLUG_CLAIM" ? `${baseUrl}/@${(reference_id || "").replace(/^@/, "")}?claimed=1` : type === "SLUG_PURCHASE" ? `${baseUrl}/market/${reference_id}?paid=1` : `${baseUrl}/v/${reference_id}?paid=1`),
       cancel_url: cancel_url || baseUrl,
       customer_email: customer_email || undefined,
       metadata: {

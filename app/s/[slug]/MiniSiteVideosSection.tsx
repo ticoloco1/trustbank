@@ -52,7 +52,7 @@ export default function MiniSiteVideosSection({ miniSiteSlug, primaryColor, club
         ))}
       </div>
       <div style={{ marginTop: "1rem" }}>
-        <Link href={`/s/${miniSiteSlug}/videos`} style={{ color: "#2563eb", fontWeight: 600, textDecoration: "none" }}>
+        <Link href={miniSiteSlug ? `/@${(miniSiteSlug || "").replace(/^@/, "")}/videos` : "/"} style={{ color: "#2563eb", fontWeight: 600, textDecoration: "none" }}>
           Ver todos os vídeos deste negócio →
         </Link>
       </div>

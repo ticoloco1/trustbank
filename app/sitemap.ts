@@ -22,7 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       select: { slug: true, updated_at: true },
     });
     const miniSiteUrls: MetadataRoute.Sitemap = sites.map((s) => ({
-      url: `${BASE_URL}/s/${encodeURIComponent(s.slug!)}`,
+      url: `${BASE_URL}/@${encodeURIComponent((s.slug || "").replace(/^@/, ""))}`,
       lastModified: s.updated_at,
       changeFrequency: "weekly" as const,
       priority: 0.8,

@@ -75,6 +75,16 @@ export default function EditMiniSitePage() {
   });
   const { addItem, hasItem } = useCart();
 
+  const { data: sessionUser, isFetched: sessionFetched } = useQuery({
+    queryKey: ["auth-session"],
+    queryFn: async () => {
+      const r = await fetch("/api/auth/session", { credentials: "include" });
+      const data = await r.json();
+      return data as { user: { id: string; email: string | null } | null };
+    },
+  });
+  const hasDashboardAccess = !!user || !!isAdmin || !!sessionUser?.user;
+
   const { data: site, isLoading } = useQuery({
     queryKey: ["mini-site", id],
     queryFn: async () => {
@@ -339,11 +349,24 @@ export default function EditMiniSitePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["mini-site", id] }),
   });
 
-  if (loading || (!user && !isAdmin)) {
+  if (loading) {
     return (
       <main style={{ padding: "2rem" }}>
-        <p>Loading — connect your admin wallet to continue.</p>
-        <Link href="/">← Back</Link>
+        <p>Verificando acesso…</p>
+        <Link href="/">← Voltar</Link>
+      </main>
+    );
+  }
+  if (sessionFetched && !hasDashboardAccess) {
+    return (
+      <main style={{ padding: "2rem", maxWidth: 560, margin: "0 auto" }}>
+        <h1 style={{ fontSize: "1.25rem", marginBottom: "1rem" }}>Acesso ao editor</h1>
+        <p>Faça login (e-mail e senha) ou conecte sua carteira para editar o mini site.</p>
+        <p style={{ marginTop: "1.5rem" }}>
+          <Link href="/auth" style={{ color: "#2563eb", textDecoration: "none" }}>Entrar</Link>
+          {" · "}
+          <Link href="/dashboard" style={{ color: "#2563eb", textDecoration: "none" }}>Dashboard</Link>
+        </p>
       </main>
     );
   }
@@ -391,10 +414,15 @@ export default function EditMiniSitePage() {
       <div style={{ marginBottom: "1rem" }}>
         <Link href="/dashboard" style={{ color: "#475569", textDecoration: "none", fontSize: "0.9rem" }}>← Mini sites</Link>
       </div>
-      <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "1.35rem", marginBottom: "1rem" }}>
-        Edit: {formData.site_name || formData.slug || id.slice(0, 8)}
-        {isAdmin && <span style={{ fontSize: "0.65rem", fontWeight: 600, background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.5rem", borderRadius: 4 }}>ADMIN</span>}
-      </h1>
+      <header style={{ marginBottom: "1.25rem", paddingBottom: "1rem", borderBottom: "1px solid #e2e8f0" }}>
+        <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "1.4rem", marginBottom: "0.25rem", color: "#0f172a" }}>
+          Editor: {formData.site_name || formData.slug || id.slice(0, 8)}
+          {isAdmin && <span style={{ fontSize: "0.65rem", fontWeight: 600, background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.5rem", borderRadius: 4 }}>ADMIN</span>}
+        </h1>
+        <p style={{ fontSize: "0.9rem", color: "#64748b", margin: 0 }}>
+          Perfil, templates, páginas extras, paywall, doação, ordem dos módulos, vídeo, cores e aparência, galeria, links.
+        </p>
+      </header>
 
       {/* Layout 2 colunas: esquerda = config (scroll), direita = preview fixo */}
       <div className="dashboard-minisite-grid">
@@ -409,7 +437,7 @@ export default function EditMiniSitePage() {
             style={{ padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8 }}
           />
           <input
-            placeholder="Slug (URL: /s/[slug])"
+            placeholder="Slug (URL: /@slug)"
             value={formData.slug ?? ""}
             onChange={(e) => setEdit((prev) => mergeEdit(prev, { slug: e.target.value }))}
             style={{ padding: "0.5rem 0.75rem", border: "1px solid #e2e8f0", borderRadius: 8 }}
@@ -1039,7 +1067,7 @@ export default function EditMiniSitePage() {
               <span>
                 <strong>{p.title}</strong> — /{p.page_slug}
                 {site.slug && (
-                  <Link href={`/s/${site.slug}/p/${p.page_slug}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#7c3aed" }}>Ver</Link>
+                  <Link href={site.slug ? `/@${(site.slug || "").replace(/^@/, "")}/p/${p.page_slug}` : "#"} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#7c3aed" }}>Ver</Link>
                 )}
               </span>
               <span style={{ display: "flex", gap: "0.5rem" }}>
@@ -1152,7 +1180,7 @@ export default function EditMiniSitePage() {
 
       {site.slug && (
         <p style={{ marginBottom: "1rem" }}>
-          <Link href={`/s/${site.slug}`} style={{ color: "#0066cc" }}>Ver mini site →</Link>
+          <Link href={site.slug ? `/@${(site.slug || "").replace(/^@/, "")}` : "/dashboard"} style={{ color: "#0066cc" }}>Ver mini site →</Link>
           {site.slug.startsWith("@") && (
             <span style={{ marginLeft: "0.5rem", color: "#1e3a8a", fontWeight: 600 }}>trustbank.xyz/{site.slug}</span>
           )}
@@ -1238,10 +1266,10 @@ export default function EditMiniSitePage() {
             )}
             <p style={{ margin: "0.5rem 0 0", fontWeight: 600, fontSize: "1rem" }}>{formData.site_name || "Seu Nome"}</p>
             {formData.bio && (() => { const t = String(formData.bio).replace(/<[^>]+>/g, ""); return <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#64748b", lineHeight: 1.4, maxHeight: 48, overflow: "hidden", textOverflow: "ellipsis" }}>{t.slice(0, 80)}{t.length > 80 ? "…" : ""}</p>; })()}
-            <p style={{ margin: "0.5rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>{previewSlug ? `trustbank.xyz/s/${previewSlug}` : "trustbank.xyz"}</p>
+            <p style={{ margin: "0.5rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>{previewSlug ? `trustbank.xyz/@${(previewSlug || "").replace(/^@/, "")}` : "trustbank.xyz"}</p>
           </div>
           {previewSlug && (
-            <Link href={`/s/${previewSlug}`} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: "0.75rem", textAlign: "center", padding: "0.5rem", background: "#f1f5f9", borderRadius: 8, fontSize: "0.85rem", color: "#475569", textDecoration: "none" }}>Ver mini site →</Link>
+            <Link href={previewSlug ? `/@${(previewSlug || "").replace(/^@/, "")}` : "/dashboard"} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: "0.75rem", textAlign: "center", padding: "0.5rem", background: "#f1f5f9", borderRadius: 8, fontSize: "0.85rem", color: "#475569", textDecoration: "none" }}>Ver mini site →</Link>
           )}
         </aside>
       </div>

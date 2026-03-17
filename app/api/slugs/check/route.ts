@@ -5,7 +5,7 @@ import { getSlugOverridesFromDb } from "@/lib/slug-settings";
 
 /**
  * GET /api/slugs/check?slug=xxx&type=handle|company
- * Verifica se o slug está livre para claim. type=handle → @slug, type=company → /s/slug.
+ * Verifica se o slug está livre para claim. URL sempre /@slug.
  */
 export async function GET(request: NextRequest) {
   const prisma = getPrisma();
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       available: false,
       slug,
-      full_url: isHandle ? `trustbank.xyz/@${slug}` : `trustbank.xyz/s/${slug}`,
+      full_url: `trustbank.xyz/@${slug}`,
       message: tier.message || "This slug cannot be registered.",
     });
   }
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       available: false,
       slug,
-      full_url: isHandle ? `trustbank.xyz/@${slug}` : `trustbank.xyz/s/${slug}`,
+      full_url: `trustbank.xyz/@${slug}`,
       message: "This slug is already taken.",
     });
   }
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       available: false,
       slug,
-      full_url: isHandle ? `trustbank.xyz/@${slug}` : `trustbank.xyz/s/${slug}`,
+      full_url: `trustbank.xyz/@${slug}`,
       message: "This slug is listed for sale. Buy it from the marketplace.",
       listing_id: activeListing.id,
     });
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     available: true,
     slug,
     slug_type: isHandle ? "handle" : "company",
-    full_url: isHandle ? `trustbank.xyz/@${slug}` : `trustbank.xyz/s/${slug}`,
+    full_url: `trustbank.xyz/@${slug}`,
     message: "Slug is available. Pay to claim and create your page.",
     amount_usdc: tier.amount_usdc,
     tier: tier.tier,

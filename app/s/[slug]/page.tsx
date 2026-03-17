@@ -18,6 +18,12 @@ import type { Prisma } from "@prisma/client";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://trustbank.xyz";
 
+/** URL canônica do mini site: só /@ (ex.: trustbank.xyz/@ary). */
+function canonicalMinisiteUrl(slug: string): string {
+  const norm = (slug || "").replace(/^@/, "");
+  return norm ? `${BASE_URL}/@${norm}` : BASE_URL;
+}
+
 type SiteWithRelations = Prisma.MiniSiteGetPayload<{
   include: {
     ideas: true;
@@ -49,7 +55,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   });
 
   const canonicalSlug = slug.startsWith("@") ? slug : (site?.slug ?? slug);
-  const url = `${BASE_URL}/s/${canonicalSlug}`;
+  const url = canonicalMinisiteUrl(canonicalSlug);
 
   if (!site) {
     return {
@@ -105,7 +111,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title: `${slug} | TrustBank`,
       description: "Mini site no TrustBank.",
-      openGraph: { title: `${slug} | TrustBank`, url: `${BASE_URL}/s/${slug}` },
+      openGraph: { title: `${slug} | TrustBank`, url: canonicalMinisiteUrl(slug) },
     };
   }
 }
@@ -123,7 +129,7 @@ export default async function MiniSitePage({ params }: Props) {
   if (!prisma) {
     return (
       <main style={{ padding: "2rem", fontFamily: "system-ui", textAlign: "center", minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>trustbank.xyz/s/{slug}</h1>
+        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>trustbank.xyz/@{slug.replace(/^@/, "")}</h1>
         <p style={{ color: "#64748b", marginBottom: "1rem" }}>Banco de dados não configurado. Configure DATABASE_URL na Vercel (Settings → Environment Variables).</p>
         <Link href="/" style={{ color: "#0d9488", fontWeight: 600 }}>← Voltar à home</Link>
       </main>
@@ -149,8 +155,8 @@ export default async function MiniSitePage({ params }: Props) {
     console.error("[s/[slug]]", err);
     return (
       <main style={{ padding: "2rem", fontFamily: "system-ui", textAlign: "center", minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>Erro ao carregar trustbank.xyz/s/{slug}</h1>
-        <p style={{ color: "#64748b", marginBottom: "1rem" }}>Falha ao conectar ao banco. Verifique DATABASE_URL na Vercel e se as tabelas existem (npm run db:push ou migrations).</p>
+        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>Erro ao carregar trustbank.xyz/@{slug.replace(/^@/, "")}</h1>
+        <p style={{ color: "#64748b", marginBottom: "1rem" }}>Falha ao conectar ao banco ou tabelas faltando. Verifique DATABASE_URL na Vercel (Settings → Environment Variables). No seu PC, com DATABASE_URL do produção no .env.local, rode: <code style={{ background: "#f1f5f9", padding: "0.2em 0.4em", borderRadius: 4 }}>npm run db:push</code> para criar/atualizar as tabelas.</p>
         <Link href="/" style={{ color: "#0d9488", fontWeight: 600 }}>← Voltar à home</Link>
       </main>
     );
@@ -173,16 +179,17 @@ export default async function MiniSitePage({ params }: Props) {
       where: { slug: otherSlug },
     });
     const available = !takenByOther && !listing && /^[a-z0-9@_-]+$/i.test(slugNorm);
+    const displaySlug = (slug || "").replace(/^@/, "");
     return (
       <main style={{ fontFamily: "system-ui", minHeight: "100vh", padding: "2rem", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ maxWidth: 420, textAlign: "center" }}>
-          <h1 style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>trustbank.xyz/s/{slug}</h1>
+          <h1 style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>trustbank.xyz/@{displaySlug || "..."}</h1>
           <p style={{ color: "#64748b", marginBottom: "1.5rem" }}>
             {listing
-              ? "This slug is listed for sale. Buy it from the marketplace."
+              ? "Este slug está à venda. Compre no marketplace."
               : available
-                ? "This slug is available. Claim it to create your page."
-                : "This page does not exist yet."}
+                ? "Este slug está livre. Reivindique para criar sua página."
+                : "Esta página ainda não existe."}
           </p>
           {listing && (
             <Link href={`/market/${listing.id}`} style={{ display: "inline-block", padding: "12px 20px", background: "#0d9488", color: "#fff", borderRadius: 8, fontWeight: 600, textDecoration: "none" }}>
@@ -191,7 +198,7 @@ export default async function MiniSitePage({ params }: Props) {
           )}
           {available && !listing && (
             <Link href={`/slugs?slug=${encodeURIComponent(slugNorm)}`} style={{ display: "inline-block", padding: "12px 20px", background: "#0d9488", color: "#fff", borderRadius: 8, fontWeight: 600, textDecoration: "none" }}>
-              Pay $12.90 & claim this slug
+              Reivindicar este slug
             </Link>
           )}
           <p style={{ marginTop: "1.5rem" }}>
@@ -401,7 +408,7 @@ export default async function MiniSitePage({ params }: Props) {
     "@type": "WebPage",
     name: site.site_name || site.slug || slug,
     description: site.bio || undefined,
-    url: `${BASE_URL}/s/${site.slug}`,
+    url: canonicalMinisiteUrl(site.slug ?? slug),
     publisher: { "@type": "Organization", name: "TrustBank", url: BASE_URL },
     ...(site.ideas?.length
       ? { mainEntity: { "@type": "ItemList", itemListElement: site.ideas.slice(0, 10).map((idea, i) => ({ "@type": "ListItem", position: i + 1, name: idea.title || idea.content?.slice(0, 80) })) } }

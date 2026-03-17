@@ -137,7 +137,7 @@ function SlugsContent() {
     }
   };
 
-  const displayUrl = slugType === "handle" ? `${BASE}/@${slugClean || "..."}` : `${BASE}/s/${slugClean || "..."}`;
+  const displayUrl = `${BASE}/@${(slugClean || "...").replace(/^@/, "")}`;
   const amountUsdc = paymentConfig?.amount_usdc ?? checkResult?.amount_usdc ?? "12.90";
   const refForCart = slugClean;
 

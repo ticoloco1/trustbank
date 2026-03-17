@@ -307,6 +307,18 @@ model AdminWalletAddress {
   @@map("admin_wallet_addresses")
 }
 
+// Login próprio: email + senha (sem Google). Wallet opcional para payout.
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique @map("email")
+  password_hash String   @map("password_hash")
+  wallet        String?   @map("wallet")   // carteira opcional (0x...)
+  created_at    DateTime  @default(now()) @map("created_at")
+  updated_at    DateTime  @updatedAt @map("updated_at")
+  creators      Creator[]
+  @@map("users")
+}
+
 // Créditos TrustBank: 1 crédito = 1 USDC. Só se compra/vende shares com créditos; retirada vira USDC na carteira.
 model CreditBalance {
   id           String   @id @default(uuid())
@@ -332,30 +344,34 @@ model CreditTransaction {
   @@map("credit_transactions")
 }
 
-// Criador com Google/YouTube verificado — só pode usar paywall quem provar ser dono do vídeo
+// Criador: login próprio (user_id) ou wallet. Vídeo validado por backlink (não mais Google OAuth).
 model Creator {
   id                 String   @id @default(uuid())
-  google_id          String?  @unique @map("google_id")
+  user_id            String?  @unique @map("user_id")   // nosso User (login email/senha)
+  google_id          String?  @unique @map("google_id") // legado
   email              String?  @map("email")
   youtube_channel_id String?  @unique @map("youtube_channel_id")
-  payout_wallet      String?  @map("payout_wallet")   // carteira para receber parte do paywall
+  payout_wallet      String?  @map("payout_wallet")     // carteira para receber parte do paywall
   created_at         DateTime @default(now()) @map("created_at")
   updated_at         DateTime @updatedAt @map("updated_at")
+  user               User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
   videos             Video[]
   @@map("creators")
 }
 
-// Vídeo só aparece no painel com paywall se o dono foi verificado via YouTube API
+// Vídeo: dono identificado por login próprio ou wallet; validação por backlink (link na descrição do vídeo).
 model Video {
   id                 String        @id @default(uuid())
   creator_id         String        @map("creator_id")
   youtube_id         String        @unique @map("youtube_id")
-  channel_id         String        @map("channel_id")   // canal do YouTube (dono)
+  channel_id         String?       @map("channel_id")   // canal (opcional; vem da API pública)
   title              String?       @map("title")
   thumbnail_url      String?       @map("thumbnail_url")
   paywall_enabled    Boolean       @default(false) @map("paywall_enabled")
   paywall_price_usdc String?       @map("paywall_price_usdc")
-  delisted_at        DateTime?     @map("delisted_at")   // quando o criador tirou o vídeo do ar (seguro/rateio)
+  backlink_verified  Boolean       @default(false) @map("backlink_verified")  // true quando backlink na descrição
+  backlink_url       String?       @map("backlink_url")  // URL que o criador deve colocar na descrição
+  delisted_at        DateTime?     @map("delisted_at")
   created_at         DateTime      @default(now()) @map("created_at")
   updated_at         DateTime      @updatedAt @map("updated_at")
   creator            Creator         @relation(fields: [creator_id], references: [id], onDelete: Cascade)

@@ -34,7 +34,7 @@ export default async function MiniSiteVideosPage({ params }: Props) {
         <div style={{ marginBottom: "1.5rem" }}>
           <Link href="/" style={{ color: primary, textDecoration: "none", fontSize: "0.9rem" }}>← TrustBank</Link>
           <span style={{ margin: "0 0.5rem", color: "#94a3b8" }}>/</span>
-          <Link href={`/s/${site.slug}`} style={{ color: primary, textDecoration: "none", fontSize: "0.9rem" }}>{site.site_name || site.slug || slug}</Link>
+          <Link href={site.slug ? `/@${(site.slug || "").replace(/^@/, "")}` : "/"} style={{ color: primary, textDecoration: "none", fontSize: "0.9rem" }}>{site.site_name || site.slug || slug}</Link>
         </div>
         <h1 style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>Todos os vídeos</h1>
         <p style={{ color: "#64748b", marginBottom: "1.5rem", fontSize: "0.95rem" }}>

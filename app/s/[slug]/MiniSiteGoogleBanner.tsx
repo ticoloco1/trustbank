@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 export default function MiniSiteGoogleBanner({ slug }: { slug: string }) {
-  const returnTo = `/s/${encodeURIComponent(slug)}`;
+  const returnTo = `/@${encodeURIComponent((slug || "").replace(/^@/, ""))}`;
   const authUrl = `/api/auth/google?returnTo=${encodeURIComponent(returnTo)}`;
 
   return (

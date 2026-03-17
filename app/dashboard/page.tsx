@@ -29,6 +29,8 @@ type Video = {
   thumbnail_url: string | null;
   paywall_enabled: boolean;
   paywall_price_usdc: string | null;
+  backlink_url?: string | null;
+  backlink_verified?: boolean;
 };
 
 function DashboardContent() {
@@ -36,7 +38,6 @@ function DashboardContent() {
   const { user, isAdmin, loading } = useAuth();
   const { address } = useAccount();
   const [videoForm, setVideoForm] = useState({ youtubeUrl: "", paywallEnabled: false, paywallPriceUsdc: "" });
-  const [googleError, setGoogleError] = useState<string | null>(null);
   const [standaloneSlugForm, setStandaloneSlugForm] = useState({
     slug_value: "",
     slug_type: "company" as "company" | "handle",
@@ -74,23 +75,26 @@ function DashboardContent() {
     },
   });
 
-  const { data: googleSession, refetch: refetchGoogle } = useQuery({
-    queryKey: ["google-session"],
+  const { data: sessionUser, refetch: refetchSession, isFetched: sessionFetched } = useQuery({
+    queryKey: ["auth-session"],
     queryFn: async () => {
-      const r = await fetch("/api/auth/google/session", { credentials: "include" });
+      const r = await fetch("/api/auth/session", { credentials: "include" });
       const data = await r.json();
       return data as { user: { id: string; email: string | null } | null };
     },
   });
+  const hasDashboardAccess = !!user || !!isAdmin || !!sessionUser?.user;
 
+  const canManageVideos = !!sessionUser?.user || !!address;
   const { data: videos = [], isLoading: videosLoading } = useQuery({
-    queryKey: ["videos", !!googleSession?.user],
+    queryKey: ["videos", !!sessionUser?.user, address],
     queryFn: async () => {
-      const r = await fetch("/api/videos", { credentials: "include" });
+      const url = address && !sessionUser?.user ? `/api/videos?wallet=${encodeURIComponent(address)}` : "/api/videos";
+      const r = await fetch(url, { credentials: "include" });
       if (!r.ok) return [];
       return r.json() as Promise<Video[]>;
     },
-    enabled: !!googleSession?.user,
+    enabled: canManageVideos,
   });
 
   const { data: apiKeysStatus, refetch: refetchApiKeys } = useQuery({
@@ -202,6 +206,7 @@ function DashboardContent() {
           youtubeUrl: payload.youtubeUrl,
           paywallEnabled: payload.paywallEnabled,
           paywallPriceUsdc: payload.paywallPriceUsdc || undefined,
+          ...(address ? { wallet: address } : {}),
         }),
       });
       const data = await r.json();
@@ -214,19 +219,11 @@ function DashboardContent() {
     },
   });
 
-  const logoutGoogle = async () => {
-    await fetch("/api/auth/google/session", { method: "DELETE", credentials: "include" });
-    refetchGoogle();
+  const logoutSession = async () => {
+    await fetch("/api/auth/session", { method: "DELETE", credentials: "include" });
+    refetchSession();
     qc.invalidateQueries({ queryKey: ["videos"] });
   };
-
-  useEffect(() => {
-    const err = searchParams.get("google_error");
-    if (err) {
-      setGoogleError(err === "missing_code" ? "Resposta do Google sem código." : err === "exchange_failed" ? "Falha ao trocar código por token. Tente de novo." : err);
-      window.history.replaceState({}, "", "/dashboard");
-    }
-  }, [searchParams]);
 
   useEffect(() => {
     const slugFromUrl = searchParams.get("slug")?.trim();
@@ -241,7 +238,7 @@ function DashboardContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: address?.toLowerCase() ?? user?.email ?? user?.id ?? "anonymous",
+          user_id: address?.toLowerCase() ?? sessionUser?.user?.id ?? user?.email ?? user?.id ?? "anonymous",
           ...(isAdmin && address ? { admin_wallet: address.toLowerCase() } : {}),
           site_name: payload.site_name || null,
           slug: payload.slug || null,
@@ -291,7 +288,7 @@ function DashboardContent() {
   });
 
   if (loading) return <p style={{ padding: "2rem" }}>Verificando acesso…</p>;
-  if (!user && !isAdmin) {
+  if (sessionFetched && !hasDashboardAccess) {
     return (
       <main style={{ padding: "2rem", fontFamily: "system-ui", maxWidth: 560, margin: "0 auto" }}>
         <h1 style={{ fontSize: "1.25rem", marginBottom: "1rem" }}>Acesso ao Dashboard</h1>
@@ -305,15 +302,15 @@ function DashboardContent() {
               <li><strong>Variável de ambiente (mais rápido):</strong> no Vercel (ou no seu servidor), adicione <code style={{ background: "#f1f5f9", padding: "0.15em 0.35em", borderRadius: 4 }}>ADMIN_WALLET={address.toLowerCase()}</code> nas variáveis de ambiente (server). Depois faça redeploy.</li>
               <li><strong>Banco de dados:</strong> insira este endereço na tabela <code style={{ background: "#f1f5f9", padding: "0.15em 0.35em", borderRadius: 4 }}>admin_wallet_addresses</code> (campo <code>wallet_address</code>), por exemplo via Prisma Studio ou SQL.</li>
             </ol>
-            <p style={{ fontSize: "0.9rem", color: "#64748b" }}>O login de admin no TrustBank é só por carteira. Email é usado apenas para Google (vídeos/paywall), não para acessar o painel.</p>
+            <p style={{ fontSize: "0.9rem", color: "#64748b" }}>Ou faça login com e-mail e senha para acessar o dashboard (criar mini sites, vídeos).</p>
           </>
         ) : (
-          <p>Conecte sua carteira (MetaMask ou outra) para acessar o dashboard. O admin é identificado pela carteira, não por email.</p>
+          <p>Faça <strong>login</strong> (e-mail e senha) ou conecte sua <strong>carteira</strong> para acessar o dashboard e gerenciar mini sites e vídeos.</p>
         )}
         <p style={{ marginTop: "1.5rem" }}>
           <Link href="/" style={{ color: "#0066cc", textDecoration: "none" }}>← Voltar à home</Link>
           {" · "}
-          <Link href="/auth" style={{ color: "#0066cc", textDecoration: "none" }}>Entrar com Google</Link>
+          <Link href="/auth" style={{ color: "#0066cc", textDecoration: "none" }}>Entrar</Link>
         </p>
       </main>
     );
@@ -382,15 +379,15 @@ function DashboardContent() {
         {sidebarSection === "minisites" && (
           <>
       <p style={{ color: "#64748b", marginBottom: "1rem", fontSize: "0.9rem" }}>
-        Crie e edite mini sites. URL: /s/<strong>slug</strong>. <Link href="/slugs" style={{ color: "#2563eb" }}>Slugs</Link>
+        Crie o mini site abaixo; depois use <strong>Editar</strong> para o painel completo (templates, paywall, páginas extras, módulos, aparência). URL: /s/<strong>slug</strong>. <Link href="/slugs" style={{ color: "#2563eb" }}>Slugs</Link>
         {" · "}
         <Link href="/market" style={{ color: "#2563eb" }}>Marketplace</Link>
         {isAdmin && <span style={{ marginLeft: "0.5rem", color: "#15803d" }}>Admin: slug sem pagamento.</span>}
       </p>
 
-      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>
-          Create mini site
+      <section style={{ marginBottom: "2rem", padding: "1.25rem", background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <h2 style={{ fontSize: "1.15rem", marginBottom: "0.75rem", color: "#1e293b" }}>
+          Criar mini site
           {isAdmin && <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "#15803d", marginLeft: "0.5rem" }}>(admin: slug without payment)</span>}
         </h2>
         <form
@@ -531,65 +528,65 @@ function DashboardContent() {
         </form>
       </section>
 
-      <section style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Seus mini sites</h2>
+      <section style={{ marginBottom: "2rem", padding: "1.25rem", background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", borderRadius: 12, color: "#e2e8f0", border: "1px solid #334155" }}>
+        <h2 style={{ fontSize: "1.2rem", marginBottom: "0.35rem", color: "#fff" }}>Seus mini sites</h2>
+        <p style={{ fontSize: "0.9rem", color: "#94a3b8", marginBottom: "1rem" }}>
+          Clique em <strong>Editar</strong> para acessar o painel completo: templates, páginas extras, paywall, doação, ordem dos módulos, vídeo de apresentação, cores e aparência, galeria, links e muito mais.
+        </p>
         {isLoading ? (
-          <p>Loading…</p>
+          <p style={{ color: "#94a3b8" }}>Carregando…</p>
         ) : miniSites.length === 0 ? (
-          <p style={{ color: "#666" }}>Nenhum ainda. Crie um acima.</p>
+          <p style={{ color: "#94a3b8" }}>Nenhum ainda. Crie um acima.</p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {miniSites.map((s) => (
               <li
                 key={s.id}
                 style={{
-                  padding: "1rem",
+                  padding: "1rem 1.25rem",
                   marginBottom: "0.5rem",
-                  background: "#f9f9f9",
-                  borderRadius: 6,
+                  background: "rgba(255,255,255,0.06)",
+                  borderRadius: 10,
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
                   flexWrap: "wrap",
-                  gap: "0.5rem",
+                  gap: "0.75rem",
+                  border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
                 <div>
-                  <strong>{s.site_name || s.slug || s.id.slice(0, 8)}</strong>
+                  <strong style={{ color: "#f8fafc" }}>{s.site_name || s.slug || s.id.slice(0, 8)}</strong>
                   {s.slug && (
-                    <span style={{ marginLeft: "0.5rem", color: "#666" }}>
+                    <span style={{ marginLeft: "0.5rem", color: "#94a3b8", fontSize: "0.9rem" }}>
                       /s/{s.slug}
-                      {s.slug.startsWith("@") && <span style={{ marginLeft: "0.25rem", fontSize: "0.85rem", color: "#1e3a8a", fontWeight: 600 }}>(ou /{s.slug})</span>}
+                      {s.slug.startsWith("@") && <span style={{ marginLeft: "0.25rem", fontSize: "0.85rem", color: "#93c5fd", fontWeight: 600 }}>(ou /{s.slug})</span>}
                     </span>
                   )}
-                  {s._count && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#888" }}>({s._count.ideas} ideas)</span>}
+                  {s._count != null && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#64748b" }}>({s._count.ideas} posts)</span>}
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                   {s.slug && (
                     <Link
-                      href={`/s/${s.slug}`}
-                      style={{ padding: "0.25rem 0.5rem", background: "#eee", borderRadius: 4, textDecoration: "none", color: "#333", fontSize: "0.9rem" }}
+                      href={`/@${(s.slug || "").replace(/^@/, "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ padding: "0.4rem 0.75rem", background: "#334155", color: "#e2e8f0", borderRadius: 8, textDecoration: "none", fontSize: "0.9rem", fontWeight: 500 }}
                     >
-                      Ver
+                      Ver site
                     </Link>
                   )}
                   <Link
-                    href={`/dashboard/${s.id}#marketplace`}
-                    style={{ padding: "0.25rem 0.5rem", background: "#0d9488", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
-                  >
-                    Vender
-                  </Link>
-                  <Link
-                    href={`/dashboard/${s.id}#marketplace`}
-                    style={{ padding: "0.25rem 0.5rem", background: "#7c3aed", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
-                  >
-                    Leilão
-                  </Link>
-                  <Link
                     href={`/dashboard/${s.id}`}
-                    style={{ padding: "0.25rem 0.5rem", background: "#333", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.9rem" }}
+                    style={{ padding: "0.5rem 1rem", background: "#6366f1", color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: "0.95rem", fontWeight: 600, boxShadow: "0 2px 8px rgba(99,102,241,0.35)" }}
                   >
-                    Editar
+                    Editar (painel completo)
+                  </Link>
+                  <Link
+                    href={`/dashboard/${s.id}#marketplace`}
+                    style={{ padding: "0.4rem 0.75rem", background: "#0d9488", color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: "0.85rem" }}
+                  >
+                    Vender slug
                   </Link>
                 </div>
               </li>
@@ -788,26 +785,18 @@ function DashboardContent() {
       <section style={{ padding: "1rem", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Vídeos e paywall (YouTube)</h2>
         <p style={{ fontSize: "0.9rem", color: "#0c4a6e", marginBottom: "0.5rem" }}>
-          <strong>Opcional:</strong> entre com Google <strong>só se</strong> for gerenciar vídeos do YouTube e ativar paywall. Você já está logado com a carteira; não é obrigatório usar email/Google.
+          Faça <strong>login</strong> (e-mail/senha) ou conecte a <strong>carteira</strong> para adicionar vídeos. Validação por <strong>backlink</strong>: coloque o link do vídeo na descrição no YouTube.
         </p>
-        {googleError && (
-          <p style={{ padding: "0.5rem", marginBottom: "0.75rem", background: "#fef2f2", color: "#b91c1c", borderRadius: 4, fontSize: "0.9rem" }}>
-            {googleError}
-          </p>
-        )}
-        <p style={{ fontSize: "0.9rem", color: "#555", marginBottom: "1rem" }}>
-          Só vídeos que você comprovar ser dono (conta Google do canal) aparecem aqui e podem ter paywall.
-        </p>
-        {!googleSession?.user ? (
+        {!canManageVideos ? (
           <div>
-            <a
-              href="/api/auth/google"
+            <Link
+              href="/auth"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.5rem",
                 padding: "0.5rem 1rem",
-                background: "#1a73e8",
+                background: "#1e3a8a",
                 color: "#fff",
                 borderRadius: 6,
                 textDecoration: "none",
@@ -815,21 +804,25 @@ function DashboardContent() {
                 fontSize: "0.95rem",
               }}
             >
-              Entrar com Google
-            </a>
-            <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "#666" }}>Use a conta do canal do YouTube para adicionar vídeos e ativar paywall.</p>
+              Entrar
+            </Link>
+            <span style={{ marginLeft: "0.5rem", fontSize: "0.9rem" }}>ou conecte a carteira acima.</span>
           </div>
         ) : (
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.9rem" }}>Conectado: <strong>{googleSession.user.email || googleSession.user.id}</strong></span>
-              <button
-                type="button"
-                onClick={logoutGoogle}
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", background: "#eee", border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }}
-              >
-                Sair
-              </button>
+              <span style={{ fontSize: "0.9rem" }}>
+                Conectado: <strong>{sessionUser?.user?.email || sessionUser?.user?.id || (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "")}</strong>
+              </span>
+              {sessionUser?.user && (
+                <button
+                  type="button"
+                  onClick={logoutSession}
+                  style={{ padding: "0.25rem 0.5rem", fontSize: "0.85rem", background: "#eee", border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }}
+                >
+                  Sair (login)
+                </button>
+              )}
             </div>
             <form
               onSubmit={(e) => {
@@ -866,7 +859,7 @@ function DashboardContent() {
                 disabled={addVideoMutation.isPending}
                 style={{ padding: "0.5rem 1rem", background: "#1a73e8", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer", alignSelf: "flex-start" }}
               >
-                {addVideoMutation.isPending ? "Verificando dono…" : "Adicionar vídeo"}
+                {addVideoMutation.isPending ? "Adicionando…" : "Adicionar vídeo"}
               </button>
               {addVideoMutation.isError && (
                 <p style={{ color: "#b91c1c", fontSize: "0.9rem" }}>{(addVideoMutation.error as Error).message}</p>
@@ -876,7 +869,7 @@ function DashboardContent() {
             {videosLoading ? (
               <p>Carregando…</p>
             ) : videos.length === 0 ? (
-              <p style={{ color: "#666", fontSize: "0.9rem" }}>Nenhum vídeo ainda. Adicione um acima (só aparecem vídeos que você é dono no YouTube).</p>
+              <p style={{ color: "#666", fontSize: "0.9rem" }}>Nenhum vídeo ainda. Adicione um acima. Coloque o backlink na descrição do vídeo no YouTube para validar.</p>
             ) : (
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {videos.map((v) => (
@@ -901,6 +894,11 @@ function DashboardContent() {
                       <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "#666" }}>
                         {v.paywall_enabled ? `Paywall: ${v.paywall_price_usdc ?? "0"} USDC` : "Sem paywall"}
                       </p>
+                      {v.backlink_url && (
+                        <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#0c4a6e" }}>
+                          Backlink: <code style={{ background: "#e0f2fe", padding: "0.1em 0.3em", borderRadius: 4 }}>{v.backlink_url}</code> — coloque na descrição do vídeo no YouTube.
+                        </p>
+                      )}
                       <Link
                         href={`/v/${v.id}`}
                         style={{ marginTop: "0.5rem", display: "inline-block", fontSize: "0.85rem", color: "#1a73e8" }}

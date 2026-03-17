@@ -31,3 +31,5 @@ npm-debug.log*
 # Prisma
 prisma/migrations
 trustbank-import/
+hashpo-vercel-export/
+scripts/_new-trust-fix/

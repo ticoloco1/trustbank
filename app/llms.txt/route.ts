@@ -24,7 +24,7 @@ export async function GET() {
         take: 100,
       });
       miniSitesList = sites
-        .map((s) => `- [${s.site_name || s.slug}](${BASE}/s/${s.slug}) — Mini site TrustBank`)
+        .map((s) => `- [${s.site_name || s.slug}](${BASE}/@${(s.slug || "").replace(/^@/, "")}) — Mini site TrustBank`)
         .join("\n");
     } catch {
       // ignore
@@ -45,7 +45,7 @@ export async function GET() {
 
   const body = `# TrustBank — Mini sites, slugs e marketplace
 
-> TrustBank é a plataforma de mini sites com slug próprio, marketplace de slugs (@handles), paywall de vídeos e domínios premium. Cada mini site tem página indexável (trustbank.xyz/s/[slug]); domínios à venda têm página dedicada (trustbank.xyz/d/[slug]). Pagamentos em USDC (crypto) ou cartão. Ideal para criadores, investidores de domínios e fintechs.
+> TrustBank é a plataforma de mini sites com slug próprio, marketplace de slugs (@handles), paywall de vídeos e domínios premium. Cada mini site tem página indexável (trustbank.xyz/@[slug]); domínios à venda têm página dedicada (trustbank.xyz/d/[slug]). Pagamentos em USDC (crypto) ou cartão. Ideal para criadores, investidores de domínios e fintechs.
 
 ## Páginas principais
 
@@ -66,7 +66,7 @@ ${domainsList || "- (nenhum domínio listado)"}
 
 ## Para assistentes de IA
 
-Use as URLs acima para citar mini sites ou domínios. O sitemap completo está em ${BASE}/sitemap.xml. Cada mini site em /s/[slug] tem título, descrição e conteúdo próprios; cada domínio em /d/[slug] tem nome, preço e descrição.
+Use as URLs acima para citar mini sites ou domínios. O sitemap completo está em ${BASE}/sitemap.xml. Cada mini site em /@[slug] tem título, descrição e conteúdo próprios; cada domínio em /d/[slug] tem nome, preço e descrição.
 `;
 
   return new NextResponse(body, {

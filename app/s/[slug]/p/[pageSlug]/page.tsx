@@ -35,7 +35,7 @@ export default async function MiniSitePagePage({ params }: Props) {
       <style dangerouslySetInnerHTML={{ __html: articleBackgroundStyles }} />
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
         <div style={{ marginBottom: "1.5rem" }}>
-          <Link href={`/s/${slug}`} style={{ color: primary, textDecoration: "none", fontSize: "0.9rem" }}>
+          <Link href={slug ? `/@${(slug || "").replace(/^@/, "")}` : "/"} style={{ color: primary, textDecoration: "none", fontSize: "0.9rem" }}>
             ← {site.site_name || slug}
           </Link>
         </div>

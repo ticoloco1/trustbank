@@ -64,7 +64,7 @@ export default function ProfileTemplate({ site }: { site: Site }) {
           {badge === "gold" && <span style={{ marginLeft: 6, display: "inline-flex", alignItems: "center", width: 20, height: 20, borderRadius: "50%", background: "linear-gradient(135deg,#fbbf24,#f59e0b)", color: "#fff", fontSize: 12 }} title="Empresa">★</span>}
         </h1>
         {tagline && <p className="tb-profile-tagline" style={textColor ? { color: textColor, opacity: 0.9 } : undefined}>{tagline}</p>}
-        {slug && <p className="tb-profile-username">trustbank.xyz/s/{slug}</p>}
+        {slug && <p className="tb-profile-username">trustbank.xyz/@{slug.replace(/^@/, "")}</p>}
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.75rem", marginTop: "0.5rem" }}>
           {links.map((idea) => (
             <a

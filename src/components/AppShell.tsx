@@ -7,7 +7,7 @@ import GlobalFooter from "./GlobalFooter";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
-  const isMiniSitePage = pathname.startsWith("/s/") && pathname.length > 3;
+  const isMiniSitePage = (pathname.startsWith("/s/") || pathname.startsWith("/@")) && pathname.length > 3;
 
   if (isMiniSitePage) {
     return <>{children}</>;

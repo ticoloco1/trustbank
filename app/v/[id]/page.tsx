@@ -29,15 +29,15 @@ export default function VideoPage() {
   const [txHash, setTxHash] = useState("");
   const { addItem, hasItem } = useCart();
 
-  const { data: googleSession } = useQuery({
-    queryKey: ["google-session"],
+  const { data: sessionData } = useQuery({
+    queryKey: ["auth-session"],
     queryFn: async () => {
-      const r = await fetch("/api/auth/google/session", { credentials: "include" });
+      const r = await fetch("/api/auth/session", { credentials: "include" });
       const data = await r.json();
       return data as { user: { id: string; email: string | null } | null };
     },
   });
-  const viewerEmail = googleSession?.user?.email ?? undefined;
+  const viewerEmail = sessionData?.user?.email ?? undefined;
 
   const { data: video, isLoading, isError } = useQuery({
     queryKey: ["video", id, address ?? "no-wallet", viewerEmail ?? ""],

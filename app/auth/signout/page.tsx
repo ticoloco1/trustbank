@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function SignOutPage() {
   const router = useRouter();
   useEffect(() => {
-    fetch("/api/auth/google/session", { method: "DELETE", credentials: "include" }).then(() => {
+    fetch("/api/auth/session", { method: "DELETE", credentials: "include" }).then(() => {
       router.replace("/");
     });
   }, [router]);

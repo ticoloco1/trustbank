@@ -66,7 +66,7 @@ export default async function DomainPage({ params }: Props) {
           {siteSlug && (
             <>
               {" · "}
-              <Link href={`/s/${siteSlug}`} style={{ color: "#0d9488", textDecoration: "none", fontSize: "0.9rem" }}>
+              <Link href={siteSlug ? `/@${(siteSlug || "").replace(/^@/, "")}` : "/"} style={{ color: "#0d9488", textDecoration: "none", fontSize: "0.9rem" }}>
                 {siteName}
               </Link>
             </>
@@ -111,7 +111,7 @@ export default async function DomainPage({ params }: Props) {
         </article>
         {siteSlug && (
           <p style={{ marginTop: "1.5rem", fontSize: "0.9rem", color: "#64748b" }}>
-            <Link href={`/s/${siteSlug}`} style={{ color: "#0d9488", textDecoration: "none" }}>
+            <Link href={siteSlug ? `/@${(siteSlug || "").replace(/^@/, "")}` : "/"} style={{ color: "#0d9488", textDecoration: "none" }}>
               ← Back to {siteName}
             </Link>
           </p>

@@ -48,7 +48,7 @@ export default function HomeSlugCheck() {
   const isFree = result?.available && result?.tier === "default";
   const amountUsdc = result?.amount_usdc ?? "12.90";
   const displaySlug = slugType === "handle" ? `@${result?.slug ?? slug}` : (result?.slug ?? slug);
-  const displayUrl = slugType === "handle" ? `${BASE}/@${result?.slug ?? slug}` : `${BASE}/s/${result?.slug ?? slug}`;
+  const displayUrl = `${BASE}/@${((result?.slug ?? slug) || "").replace(/^@/, "")}`;
 
   return (
     <section
@@ -101,7 +101,7 @@ export default function HomeSlugCheck() {
       </div>
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginBottom: "1rem" }}>
         <span style={{ padding: "10px 12px", background: "#334155", borderRadius: 8, fontSize: 14, color: "#94a3b8" }}>
-          {slugType === "handle" ? `${BASE}/@` : `${BASE}/s/`}
+          {`${BASE}/@`}
         </span>
         <input
           type="text"
