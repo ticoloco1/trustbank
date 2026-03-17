@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
     return res;
   } catch (e) {
     console.error("[api/auth/register]", e);
-    return NextResponse.json({ error: "Erro ao criar conta" }, { status: 500 });
+    const msg = e instanceof Error ? e.message : "";
+    if (msg.includes("SESSION_SECRET")) {
+      return NextResponse.json(
+        { error: "Configure SESSION_SECRET no Vercel (Settings → Environment Variables) e faça redeploy." },
+        { status: 503 }
+      );
+    }
+    if (msg.includes("DATABASE") || msg.includes("prisma") || msg.includes("connect")) {
+      return NextResponse.json(
+        { error: "Banco indisponível. Verifique DATABASE_URL no Vercel e redeploy." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: "Erro ao criar conta. Tente de novo." }, { status: 500 });
   }
 }

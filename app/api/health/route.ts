@@ -5,15 +5,25 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/health
- * Para diagnosticar no host: se prisma === false, DATABASE_URL não está configurada no Vercel.
+ * Diagnóstico: prisma = banco; sessionSecret = login/criar conta funcionam.
  */
 export async function GET() {
   const prisma = getPrisma();
+  const hasSessionSecret =
+    typeof process.env.SESSION_SECRET === "string" && process.env.SESSION_SECRET.length >= 16;
+  const messages: string[] = [];
+  if (!prisma) messages.push("DATABASE_URL não configurada no Vercel. Configure e faça redeploy.");
+  if (!hasSessionSecret)
+    messages.push(
+      "SESSION_SECRET não configurada. Crie uma no Vercel (Environment Variables) com 16+ caracteres e faça redeploy."
+    );
   return NextResponse.json({
     ok: true,
     prisma: !!prisma,
-    message: prisma
-      ? "DB conectado. Pesquisa e mini-sites devem funcionar."
-      : "DATABASE_URL não configurada. Configure no Vercel → Settings → Environment Variables e faça redeploy.",
+    sessionSecret: hasSessionSecret,
+    message:
+      messages.length > 0
+        ? messages.join(" ")
+        : "DB e login OK. Criar conta e Entrar devem funcionar.",
   });
 }
