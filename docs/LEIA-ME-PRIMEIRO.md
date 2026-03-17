@@ -1,5 +1,7 @@
 # Setup — faça nessa ordem
 
+**Quer recriar tudo do zero no mesmo repo (sem perder tempo):** leia **docs/RECRIAR-DO-ZERO.md** — um único guia com banco, env e deploy desde o início.
+
 **Repositório no GitHub:** o único repo é **https://github.com/ticoloco1/hashpo.com**. O código deste projeto (royal-fintech-hub) é o que deve estar nesse repo para o **hashpo.com**. No Vercel, conecte o projeto ao repo ticoloco1/hashpo.com.
 
 **Login:** só com wallet. Não há cadastro nem login por e-mail. Se o site pedir e-mail ou “cadastro”, o deploy está errado.
