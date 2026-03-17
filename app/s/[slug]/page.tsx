@@ -313,6 +313,7 @@ export default async function MiniSitePage({ params }: Props) {
   }
 
   if (template === "profile") {
+    const s = site as SiteWithRelations & { text_color?: string | null; heading_color?: string | null; font_size_base?: string | null; avatar_size?: string | null; badge_type?: string | null };
     return (
       <>
         <AnalyticsTracker miniSiteId={site.id} path="/" />
@@ -325,6 +326,11 @@ export default async function MiniSitePage({ params }: Props) {
             theme: site.theme,
             feed_image_1: site.feed_image_1,
             ideas: site.ideas,
+            text_color: s.text_color,
+            heading_color: s.heading_color,
+            font_size_base: s.font_size_base,
+            avatar_size: s.avatar_size,
+            badge_type: s.badge_type,
           }}
         />
       </>
@@ -349,6 +355,7 @@ export default async function MiniSitePage({ params }: Props) {
   }
 
   if (template === "cv_pro") {
+    const s = site as SiteWithRelations & { text_color?: string | null; heading_color?: string | null; font_size_base?: string | null; avatar_size?: string | null; badge_type?: string | null };
     return (
       <>
         <AnalyticsTracker miniSiteId={site.id} path="/" />
@@ -364,6 +371,11 @@ export default async function MiniSitePage({ params }: Props) {
             cv_contact_email: (site as { cv_contact_email?: string | null }).cv_contact_email,
             cv_contact_phone: (site as { cv_contact_phone?: string | null }).cv_contact_phone,
             cv_contact_whatsapp: (site as { cv_contact_whatsapp?: string | null }).cv_contact_whatsapp,
+            text_color: s.text_color,
+            heading_color: s.heading_color,
+            font_size_base: s.font_size_base,
+            avatar_size: s.avatar_size,
+            badge_type: s.badge_type,
           }}
         />
       </>
@@ -377,6 +389,12 @@ export default async function MiniSitePage({ params }: Props) {
   const primary = site.primary_color ?? "#6366f1";
   const accent = site.accent_color ?? "#ec4899";
   const bg = site.bg_color ?? "#f8fafc";
+  const siteExt = site as SiteWithRelations & { text_color?: string | null; heading_color?: string | null; font_size_base?: string | null; avatar_size?: string | null; badge_type?: string | null };
+  const avatarSizes = { P: 64, M: 96, G: 128, GG: 160 } as const;
+  const defaultAvatarSize = (siteExt.avatar_size && siteExt.avatar_size in avatarSizes ? avatarSizes[siteExt.avatar_size as keyof typeof avatarSizes] : 96) as number;
+  const badgeType = siteExt.badge_type === "blue" || siteExt.badge_type === "gold" ? siteExt.badge_type : null;
+  const headingColor = siteExt.heading_color ?? primary;
+  const textColor = siteExt.text_color ?? undefined;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -416,20 +434,22 @@ export default async function MiniSitePage({ params }: Props) {
               <SafeImage src={site.banner_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
           )}
-          <div style={{ padding: site.banner_url ? "1rem 0 0" : "0", marginTop: site.banner_url ? "-48px" : 0, position: "relative", zIndex: 1, paddingLeft: "0.5rem" }}>
-            <div style={{ width: 96, height: 96, borderRadius: "50%", overflow: "hidden", border: "4px solid", borderColor: bg, background: "#e2e8f0", flexShrink: 0 }}>
+          <div style={{ padding: site.banner_url ? "1rem 0 0" : "0", marginTop: site.banner_url ? "-48px" : 0, position: "relative", zIndex: 1, paddingLeft: "0.5rem", color: textColor }}>
+            <div style={{ width: defaultAvatarSize, height: defaultAvatarSize, borderRadius: "50%", overflow: "hidden", border: "4px solid", borderColor: bg, background: "#e2e8f0", flexShrink: 0 }}>
               {site.feed_image_1 ? (
                 <SafeImage src={site.feed_image_1} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
                 <div style={{ width: "100%", height: "100%", background: primary, opacity: 0.3 }} />
               )}
             </div>
-            <h1 style={{ fontSize: "1.75rem", margin: "0.5rem 0 0", color: primary }}>
+            <h1 style={{ fontSize: "1.75rem", margin: "0.5rem 0 0", color: headingColor, display: "flex", alignItems: "center", gap: 6 }}>
               {site.site_name || "Mini Site"}
+              {badgeType === "blue" && <span style={{ width: 22, height: 22, borderRadius: "50%", background: "#3b82f6", color: "#fff", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }} title="Verificado">✓</span>}
+              {badgeType === "gold" && <span style={{ width: 22, height: 22, borderRadius: "50%", background: "linear-gradient(135deg,#fbbf24,#f59e0b)", color: "#fff", fontSize: 12, display: "inline-flex", alignItems: "center", justifyContent: "center" }} title="Empresa">★</span>}
             </h1>
             {site.bio && (
-              <p style={{ color: "#555", marginTop: "0.25rem", lineHeight: 1.5 }}>
-                {site.bio}
+              <p style={{ color: textColor ?? "#555", marginTop: "0.25rem", lineHeight: 1.5 }}>
+                {site.bio.replace(/<[^>]+>/g, "")}
               </p>
             )}
           </div>

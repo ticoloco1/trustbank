@@ -64,6 +64,11 @@ export async function PATCH(
     site_paywall_enabled?: boolean | null;
     donation_button_enabled?: boolean | null;
     module_order?: string[] | null;
+    text_color?: string | null;
+    heading_color?: string | null;
+    font_size_base?: string | null;
+    avatar_size?: string | null;
+    badge_type?: string | null;
   };
 
   const data: Record<string, unknown> = {};
@@ -103,6 +108,11 @@ export async function PATCH(
   if (body.site_paywall_enabled !== undefined) data.site_paywall_enabled = body.site_paywall_enabled;
   if (body.donation_button_enabled !== undefined) data.donation_button_enabled = body.donation_button_enabled;
   if (body.module_order !== undefined) data.module_order = Array.isArray(body.module_order) ? body.module_order : null;
+  if (body.text_color !== undefined) data.text_color = body.text_color;
+  if (body.heading_color !== undefined) data.heading_color = body.heading_color;
+  if (body.font_size_base !== undefined) data.font_size_base = ["small", "medium", "large"].includes(body.font_size_base) ? body.font_size_base : null;
+  if (body.avatar_size !== undefined) data.avatar_size = ["P", "M", "G", "GG"].includes(body.avatar_size) ? body.avatar_size : null;
+  if (body.badge_type !== undefined) data.badge_type = (body.badge_type === "blue" || body.badge_type === "gold") ? body.badge_type : null;
 
   if (Object.keys(data).length === 0) {
     const current = await prisma.miniSite.findUnique({ where: { id } });

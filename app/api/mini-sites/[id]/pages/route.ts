@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { BACKGROUND_VALUES } from "@/lib/article-page";
 
 const SLUG_REGEX = /^[a-z0-9_-]+$/i;
+const MAX_EXTRA_PAGES = 5;
 
 /** GET /api/mini-sites/[id]/pages — lista páginas extras do mini site */
 export async function GET(
@@ -35,11 +37,12 @@ export async function POST(
   const title = (body.title ?? "").trim();
   let page_slug = (body.page_slug ?? "").trim().toLowerCase().replace(/\s+/g, "-");
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
+  const count = await prisma.miniSitePage.count({ where: { mini_site_id: id } });
+  if (count >= MAX_EXTRA_PAGES) return NextResponse.json({ error: `Máximo de ${MAX_EXTRA_PAGES} páginas extras.` }, { status: 400 });
   if (!page_slug) page_slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "");
   if (!SLUG_REGEX.test(page_slug)) return NextResponse.json({ error: "page_slug invalid" }, { status: 400 });
   const background = (body.background ?? "default").trim() || "default";
-  const allowedBg = ["default", "white", "yellow", "blue", "grey", "beige", "orange"];
-  const bg = allowedBg.includes(background) ? background : "default";
+  const bg = BACKGROUND_VALUES.includes(background) ? background : "default";
   const existing = await prisma.miniSitePage.findUnique({
     where: { mini_site_id_page_slug: { mini_site_id: id, page_slug } },
   });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPrisma } from "@/lib/prisma";
+import { BACKGROUND_VALUES } from "@/lib/article-page";
 
-const ALLOWED_BG = ["default", "white", "yellow", "blue", "grey", "beige", "orange"];
+const ALLOWED_BG = BACKGROUND_VALUES;
 
 /** GET — uma página */
 export async function GET(

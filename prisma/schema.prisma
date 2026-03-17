@@ -84,6 +84,11 @@ model MiniSite {
   site_paywall_enabled Boolean? @default(false) @map("site_paywall_enabled")
   donation_button_enabled Boolean? @default(false) @map("donation_button_enabled")
   module_order        Json?    @map("module_order")       // ["feed","links","videos","video_apresentacao","pages","domains"]
+  text_color          String?  @map("text_color")        // cor das letras (hex)
+  heading_color       String?  @map("heading_color")      // cor dos títulos
+  font_size_base      String?  @map("font_size_base")    // small | medium | large
+  avatar_size         String?  @map("avatar_size")       // P | M | G | GG (pequeno, médio, grande)
+  badge_type          String?  @map("badge_type")        // null | blue (mini site) | gold (empresa)
   @@map("mini_sites")
 }
 

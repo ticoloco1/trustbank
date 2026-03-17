@@ -52,6 +52,11 @@ type MiniSite = {
   site_paywall_enabled?: boolean | null;
   donation_button_enabled?: boolean | null;
   module_order?: string[] | null;
+  text_color?: string | null;
+  heading_color?: string | null;
+  font_size_base?: string | null;
+  avatar_size?: string | null;
+  badge_type?: string | null;
 };
 
 export default function EditMiniSitePage() {
@@ -660,6 +665,36 @@ export default function EditMiniSitePage() {
               Accent <input type="color" value={formData.accent_color ?? "#ec4899"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { accent_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
               Background <input type="color" value={formData.bg_color ?? "#080810"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { bg_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} />
             </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center", marginTop: "0.5rem" }}>
+              <span style={{ fontSize: "0.9rem" }}>Texto</span>
+              <input type="color" value={formData.text_color ?? "#1e293b"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { text_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} title="Cor das letras" />
+              <span style={{ fontSize: "0.9rem" }}>Títulos</span>
+              <input type="color" value={formData.heading_color ?? "#0f172a"} onChange={(e) => setEdit((prev) => mergeEdit(prev, { heading_color: e.target.value }))} style={{ width: 36, height: 28, padding: 0, border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }} title="Cor dos títulos" />
+            </div>
+            <div style={{ marginTop: "0.5rem" }}>
+              <span style={{ fontSize: "0.9rem", display: "block", marginBottom: "0.35rem" }}>Tamanho da fonte</span>
+              {(["small", "medium", "large"] as const).map((size) => (
+                <button key={size} type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { font_size_base: size }))} style={{ marginRight: "0.35rem", padding: "0.35rem 0.6rem", fontSize: "0.85rem", borderRadius: 6, border: (formData.font_size_base ?? "medium") === size ? "2px solid #6366f1" : "1px solid #ccc", background: (formData.font_size_base ?? "medium") === size ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                  {size === "small" ? "Pequeno" : size === "medium" ? "Médio" : "Grande"}
+                </button>
+              ))}
+            </div>
+            <div style={{ marginTop: "0.5rem" }}>
+              <span style={{ fontSize: "0.9rem", display: "block", marginBottom: "0.35rem" }}>Tamanho da foto de perfil</span>
+              {(["P", "M", "G", "GG"] as const).map((av) => (
+                <button key={av} type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { avatar_size: av }))} style={{ marginRight: "0.35rem", padding: "0.35rem 0.6rem", fontSize: "0.85rem", borderRadius: 6, border: (formData.avatar_size ?? "M") === av ? "2px solid #6366f1" : "1px solid #ccc", background: (formData.avatar_size ?? "M") === av ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                  {av}
+                </button>
+              ))}
+            </div>
+            <div style={{ marginTop: "0.5rem" }}>
+              <span style={{ fontSize: "0.9rem", display: "block", marginBottom: "0.35rem" }}>Selo</span>
+              {([null, "blue", "gold"] as const).map((badge) => (
+                <button key={badge ?? "none"} type="button" onClick={() => setEdit((prev) => mergeEdit(prev, { badge_type: badge }))} style={{ marginRight: "0.35rem", padding: "0.35rem 0.6rem", fontSize: "0.85rem", borderRadius: 6, border: (formData.badge_type ?? null) === badge ? "2px solid #6366f1" : "1px solid #ccc", background: (formData.badge_type ?? null) === badge ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                  {badge === null ? "Nenhum" : badge === "blue" ? "Azul (mini site)" : "Dourado (empresa)"}
+                </button>
+              ))}
+            </div>
           </div>
           <input
             placeholder="Quote symbol (BTC/ETH)"
@@ -993,7 +1028,7 @@ export default function EditMiniSitePage() {
         <style dangerouslySetInnerHTML={{ __html: articleBackgroundStyles }} />
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem", color: "#5b21b6" }}>📄 Páginas extras / Artigos</h2>
         <p style={{ fontSize: "0.9rem", color: "#6b21a8", marginBottom: "0.5rem" }}>
-          1 página inclusa. Páginas adicionais por $5,00 cada (até 10).
+          Até 5 páginas. Escolha o fundo: branco, amarelo notepad, cinza, claro, escuro, mapa pirata e mais.
         </p>
         <p style={{ fontSize: "0.95rem", color: "#4c1d95", marginBottom: "1rem", fontWeight: 600 }}>
           Editor rico: página branca com linhas, negrito, itálico, fontes, tamanhos, cores, imagens e links. Escolha o fundo abaixo.
@@ -1014,7 +1049,10 @@ export default function EditMiniSitePage() {
             </li>
           ))}
         </ul>
-        <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>{editingPageId ? "Editar página" : "Nova página"}</h3>
+        <h3 style={{ fontSize: "0.95rem", marginBottom: "0.5rem" }}>{editingPageId ? "Editar página" : "Nova página"} {extraPages.length >= 5 && !editingPageId && "(máx. 5)"}</h3>
+        {extraPages.length >= 5 && !editingPageId ? (
+          <p style={{ fontSize: "0.9rem", color: "#6b21a8" }}>Você já tem 5 páginas extras. Exclua uma para adicionar outra.</p>
+        ) : (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1064,6 +1102,7 @@ export default function EditMiniSitePage() {
             {editingPageId && <button type="button" onClick={() => { setEditingPageId(null); setPageForm({ title: "", page_slug: "", content_html: "", background: "white-lines" }); }} style={{ padding: "0.5rem 1rem", background: "#64748b", color: "#fff", border: 0, borderRadius: 6, cursor: "pointer" }}>Cancelar</button>}
           </div>
         </form>
+        )}
       </section>
 
       <section style={{ marginBottom: "2rem", padding: "1.25rem", background: "#ecfdf5", borderRadius: 12, border: "1px solid #a7f3d0" }}>

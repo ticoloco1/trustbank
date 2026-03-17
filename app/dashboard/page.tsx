@@ -132,6 +132,9 @@ function DashboardContent() {
     slug_allowed_override: "",
   });
 
+  /** Menu lateral: qual seção exibir (evita acumular tudo em cima) */
+  const [sidebarSection, setSidebarSection] = useState<"minisites" | "listar" | "apikeys" | "slugsettings" | "videos">("minisites");
+
   useEffect(() => {
     if (slugSettings) {
       setSlugSettingsForm({
@@ -316,27 +319,76 @@ function DashboardContent() {
     );
   }
 
+  const navItemStyle = (active: boolean): React.CSSProperties => ({
+    display: "block",
+    width: "100%",
+    padding: "0.6rem 0.75rem",
+    marginBottom: "0.25rem",
+    borderRadius: 6,
+    border: "none",
+    background: active ? "#1e40af" : "transparent",
+    color: active ? "#fff" : "#94a3b8",
+    cursor: "pointer",
+    textAlign: "left",
+    fontSize: "0.9rem",
+    fontWeight: 500,
+    textDecoration: "none",
+  });
+
   return (
-    <main style={{ padding: "2rem", fontFamily: "system-ui", maxWidth: 800, margin: "0 auto" }}>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <Link href="/" style={{ color: "#666", textDecoration: "none" }}>← Home</Link>
-      </div>
-      <h1 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        Dashboard — Mini sites
-        {isAdmin && <span style={{ fontSize: "0.65rem", fontWeight: 600, background: "#fef08a", color: "#854d0e", padding: "0.2rem 0.5rem", borderRadius: 4 }}>ADMIN</span>}
-      </h1>
-      <p style={{ color: "#555", marginBottom: "1.5rem" }}>
-        Create and edit mini sites. Use <strong>slug</strong> for the URL: /s/<strong>slug</strong>. Slugs comuns são <strong>grátis</strong> em <Link href="/slugs" style={{ color: "#0066cc" }}>/slugs</Link>.
-        <Link href="/market" style={{ marginLeft: "0.5rem", color: "#0066cc" }}>Marketplace →</Link>
-        <Link href="/cart" style={{ marginLeft: "0.5rem", color: "#0066cc" }}>Carrinho →</Link>
-        {isAdmin && (
-          <span style={{ display: "block", marginTop: "0.5rem", fontSize: "0.9rem", color: "#15803d" }}>
-            Admin: all tools enabled — create slugs without payment, API keys, list company/@handle.
-          </span>
-        )}
+    <main className="dashboard-with-sidebar">
+      {/* Menu lateral admin */}
+      <aside className="dashboard-sidebar">
+        <div style={{ marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "1px solid #334155" }}>
+          <Link href="/" style={{ color: "#94a3b8", textDecoration: "none", fontSize: "0.85rem" }}>← Home</Link>
+          <h2 style={{ margin: "0.5rem 0 0", fontSize: "1rem", fontWeight: 700, color: "#fff" }}>
+            Dashboard
+            {isAdmin && <span style={{ display: "block", fontSize: "0.65rem", fontWeight: 600, color: "#fbbf24", marginTop: "0.25rem" }}>ADMIN</span>}
+          </h2>
+        </div>
+        <nav style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+          <button type="button" style={navItemStyle(sidebarSection === "minisites")} onClick={() => setSidebarSection("minisites")}>
+            Mini sites
+          </button>
+          {address && (
+            <button type="button" style={navItemStyle(sidebarSection === "listar")} onClick={() => setSidebarSection("listar")}>
+              Listar slug (@)
+            </button>
+          )}
+          {isAdmin && address && (
+            <>
+              <button type="button" style={navItemStyle(sidebarSection === "apikeys")} onClick={() => setSidebarSection("apikeys")}>
+                API Keys
+              </button>
+              <button type="button" style={navItemStyle(sidebarSection === "slugsettings")} onClick={() => setSidebarSection("slugsettings")}>
+                Preços / Slugs
+              </button>
+            </>
+          )}
+          <button type="button" style={navItemStyle(sidebarSection === "videos")} onClick={() => setSidebarSection("videos")}>
+            Vídeos
+          </button>
+        </nav>
+        <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid #334155", fontSize: "0.8rem", color: "#64748b" }}>
+          <Link href="/slugs" style={{ color: "#94a3b8", textDecoration: "none" }}>Slugs</Link>
+          {" · "}
+          <Link href="/market" style={{ color: "#94a3b8", textDecoration: "none" }}>Market</Link>
+          {" · "}
+          <Link href="/cart" style={{ color: "#94a3b8", textDecoration: "none" }}>Carrinho</Link>
+        </div>
+      </aside>
+
+      <div className="dashboard-main">
+        {sidebarSection === "minisites" && (
+          <>
+      <p style={{ color: "#64748b", marginBottom: "1rem", fontSize: "0.9rem" }}>
+        Crie e edite mini sites. URL: /s/<strong>slug</strong>. <Link href="/slugs" style={{ color: "#2563eb" }}>Slugs</Link>
+        {" · "}
+        <Link href="/market" style={{ color: "#2563eb" }}>Marketplace</Link>
+        {isAdmin && <span style={{ marginLeft: "0.5rem", color: "#15803d" }}>Admin: slug sem pagamento.</span>}
       </p>
 
-      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f6f6f6", borderRadius: 8 }}>
+      <section style={{ marginBottom: "2rem", padding: "1rem", background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>
           Create mini site
           {isAdmin && <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "#15803d", marginLeft: "0.5rem" }}>(admin: slug without payment)</span>}
@@ -479,7 +531,76 @@ function DashboardContent() {
         </form>
       </section>
 
-      {address && (
+      <section style={{ marginBottom: "2rem" }}>
+        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Seus mini sites</h2>
+        {isLoading ? (
+          <p>Loading…</p>
+        ) : miniSites.length === 0 ? (
+          <p style={{ color: "#666" }}>Nenhum ainda. Crie um acima.</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {miniSites.map((s) => (
+              <li
+                key={s.id}
+                style={{
+                  padding: "1rem",
+                  marginBottom: "0.5rem",
+                  background: "#f9f9f9",
+                  borderRadius: 6,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                }}
+              >
+                <div>
+                  <strong>{s.site_name || s.slug || s.id.slice(0, 8)}</strong>
+                  {s.slug && (
+                    <span style={{ marginLeft: "0.5rem", color: "#666" }}>
+                      /s/{s.slug}
+                      {s.slug.startsWith("@") && <span style={{ marginLeft: "0.25rem", fontSize: "0.85rem", color: "#1e3a8a", fontWeight: 600 }}>(ou /{s.slug})</span>}
+                    </span>
+                  )}
+                  {s._count && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#888" }}>({s._count.ideas} ideas)</span>}
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {s.slug && (
+                    <Link
+                      href={`/s/${s.slug}`}
+                      style={{ padding: "0.25rem 0.5rem", background: "#eee", borderRadius: 4, textDecoration: "none", color: "#333", fontSize: "0.9rem" }}
+                    >
+                      Ver
+                    </Link>
+                  )}
+                  <Link
+                    href={`/dashboard/${s.id}#marketplace`}
+                    style={{ padding: "0.25rem 0.5rem", background: "#0d9488", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
+                  >
+                    Vender
+                  </Link>
+                  <Link
+                    href={`/dashboard/${s.id}#marketplace`}
+                    style={{ padding: "0.25rem 0.5rem", background: "#7c3aed", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
+                  >
+                    Leilão
+                  </Link>
+                  <Link
+                    href={`/dashboard/${s.id}`}
+                    style={{ padding: "0.25rem 0.5rem", background: "#333", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.9rem" }}
+                  >
+                    Editar
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+          </>
+        )}
+
+      {sidebarSection === "listar" && address && (
         <section style={{ marginBottom: "2rem", padding: "1rem", background: "#eff6ff", borderRadius: 8, border: "1px solid #93c5fd" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>List company / @handle</h2>
           <p style={{ fontSize: "0.9rem", color: "#1e40af", marginBottom: "0.75rem" }}>
@@ -529,7 +650,7 @@ function DashboardContent() {
         </section>
       )}
 
-      {isAdmin && address && (
+      {sidebarSection === "apikeys" && isAdmin && address && (
         <section style={{ marginBottom: "2rem", padding: "1rem", background: "#fefce8", borderRadius: 8, border: "1px solid #eab308" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>API keys (admin)</h2>
           <p style={{ fontSize: "0.9rem", color: "#713f12", marginBottom: "1rem" }}>
@@ -598,7 +719,7 @@ function DashboardContent() {
         </section>
       )}
 
-      {isAdmin && address && (
+      {sidebarSection === "slugsettings" && isAdmin && address && (
         <section style={{ marginBottom: "2rem", padding: "1rem", background: "#eff6ff", borderRadius: 8, border: "1px solid #93c5fd" }}>
           <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Preços e slugs @ liberados (admin)</h2>
           <p style={{ fontSize: "0.9rem", color: "#1e40af", marginBottom: "1rem" }}>
@@ -663,73 +784,7 @@ function DashboardContent() {
         </section>
       )}
 
-      <section style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>Mini sites</h2>
-        {isLoading ? (
-          <p>Loading…</p>
-        ) : miniSites.length === 0 ? (
-          <p style={{ color: "#666" }}>No mini sites yet. Create one above.</p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {miniSites.map((s) => (
-              <li
-                key={s.id}
-                style={{
-                  padding: "1rem",
-                  marginBottom: "0.5rem",
-                  background: "#f9f9f9",
-                  borderRadius: 6,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: "0.5rem",
-                }}
-              >
-                <div>
-                  <strong>{s.site_name || s.slug || s.id.slice(0, 8)}</strong>
-                  {s.slug && (
-                    <span style={{ marginLeft: "0.5rem", color: "#666" }}>
-                      /s/{s.slug}
-                      {s.slug.startsWith("@") && <span style={{ marginLeft: "0.25rem", fontSize: "0.85rem", color: "#1e3a8a", fontWeight: 600 }}>(ou /{s.slug})</span>}
-                    </span>
-                  )}
-                  {s._count && <span style={{ marginLeft: "0.5rem", fontSize: "0.85rem", color: "#888" }}>({s._count.ideas} ideas)</span>}
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {s.slug && (
-                    <Link
-                      href={`/s/${s.slug}`}
-                      style={{ padding: "0.25rem 0.5rem", background: "#eee", borderRadius: 4, textDecoration: "none", color: "#333", fontSize: "0.9rem" }}
-                    >
-                      Ver
-                    </Link>
-                  )}
-                  <Link
-                    href={`/dashboard/${s.id}#marketplace`}
-                    style={{ padding: "0.25rem 0.5rem", background: "#0d9488", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
-                  >
-                    Vender
-                  </Link>
-                  <Link
-                    href={`/dashboard/${s.id}#marketplace`}
-                    style={{ padding: "0.25rem 0.5rem", background: "#7c3aed", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.85rem" }}
-                  >
-                    Leilão
-                  </Link>
-                  <Link
-                    href={`/dashboard/${s.id}`}
-                    style={{ padding: "0.25rem 0.5rem", background: "#333", color: "#fff", borderRadius: 4, textDecoration: "none", fontSize: "0.9rem" }}
-                  >
-                    Editar
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
+      {sidebarSection === "videos" && (
       <section style={{ padding: "1rem", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd" }}>
         <h2 style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>Vídeos e paywall (YouTube)</h2>
         <p style={{ fontSize: "0.9rem", color: "#0c4a6e", marginBottom: "0.5rem" }}>
@@ -877,6 +932,9 @@ function DashboardContent() {
           </div>
         )}
       </section>
+      )}
+
+      </div>
     </main>
   );
 }

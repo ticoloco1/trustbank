@@ -16,11 +16,17 @@ export const BACKGROUND_OPTIONS = [
   { value: "peach", label: "Pêssego" },
   { value: "cream", label: "Creme" },
   { value: "map", label: "Tipo mapa (texturizado)" },
+  { value: "pirate-map", label: "Mapa pirata (pergaminho)" },
+  { value: "light", label: "Claro" },
+  { value: "dark", label: "Escuro" },
   { value: "paper-crumpled", label: "Papel amassado" },
   { value: "paper-stained", label: "Papel manchado" },
 ] as const;
 
 export type BackgroundOption = (typeof BACKGROUND_OPTIONS)[number]["value"];
+
+/** Valores aceitos para o campo background (API e banco) */
+export const BACKGROUND_VALUES: string[] = BACKGROUND_OPTIONS.map((o) => o.value);
 
 export function getArticleBackgroundClass(background: string | null | undefined): string {
   return `article-bg-${background || "default"}`;
@@ -68,6 +74,20 @@ export const articleBackgroundStyles = `
     linear-gradient(90deg, rgba(0,0,0,0.02) 1px, transparent 1px);
   background-size: 24px 24px;
 }
+.article-bg-pirate-map {
+  background: #e8dcc8;
+  background-image:
+    linear-gradient(rgba(100,80,60,0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100,80,60,0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+  box-shadow: inset 0 0 80px rgba(139,90,43,0.06);
+}
+.article-bg-pirate-map .article-content { color: #3d3225; }
+.article-bg-light { background: #f1f5f9; color: #1e293b; }
+.article-bg-dark { background: #1e293b; color: #e2e8f0; }
+.article-bg-dark a { color: #93c5fd; }
+.article-bg-dark .article-content a { color: #93c5fd; }
+.article-bg-dark h1 { color: #f8fafc !important; }
 .article-bg-paper-crumpled {
   background: #f5f0e6;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
