@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Health = { ok?: boolean; prisma?: boolean; message?: string } | null;
+type Health = { ok?: boolean; prisma?: boolean; expectPrisma?: boolean; message?: string } | null;
 
 export default function HealthBanner() {
   const [health, setHealth] = useState<Health>(null);
@@ -11,10 +11,11 @@ export default function HealthBanner() {
     fetch("/api/health")
       .then((r) => r.json())
       .then((data: Health) => setHealth(data))
-      .catch(() => setHealth({ ok: false, prisma: false }));
+      .catch(() => setHealth({ ok: false, prisma: false, expectPrisma: false }));
   }, []);
 
   if (!health || health.prisma) return null;
+  if (health.expectPrisma === false) return null;
 
   return (
     <div
