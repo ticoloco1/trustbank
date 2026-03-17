@@ -1,5 +1,5 @@
 {
-  "name": "royal-fintech-hub",
+  "name": "new-trust",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -20,6 +20,7 @@
     "@tanstack/react-query": "^5.56.0",
     "@vercel/blob": "^2.3.1",
     "@vercel/kv": "^3.0.0",
+    "bcryptjs": "^3.0.3",
     "googleapis": "^144.0.0",
     "next": "^14.2.0",
     "puppeteer-core": "^24.39.1",
@@ -32,6 +33,7 @@
     "wagmi": "^2.12.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

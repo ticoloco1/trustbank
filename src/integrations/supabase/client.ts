@@ -1,6 +1,7 @@
 /**
- * Stub para build quando o app roda em modo Prisma (TrustBank).
- * Em modo Hashpo/Supabase, substitua por um client Supabase real.
+ * Stub Supabase: sem dependência de @supabase/supabase-js (build Next.js na Vercel).
+ * Auth usa Prisma/API (NEXT_PUBLIC_USE_PRISMA ou sem NEXT_PUBLIC_SUPABASE_URL).
+ * Para usar Supabase de verdade, instale @supabase/supabase-js e troque por createClient(...).
  */
 type Session = {
   user: { id: string; email?: string | null; user_metadata?: { wallet_address?: string } };
